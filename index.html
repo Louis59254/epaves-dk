@@ -297,6 +297,45 @@
     .tech-tip-box p{font-size:12px;color:#92400e;line-height:1.6}
     .season-pill{display:inline-flex;align-items:center;gap:5px;margin:8px 16px 0;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:600;color:#c2410c}
 
+    /* MÉTÉO panel */
+    .met-scroll{flex:1;overflow-y:auto;background:var(--bg);padding:12px;-webkit-overflow-scrolling:touch}
+    .met-scroll::-webkit-scrollbar{display:none}
+    .met-section{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin:16px 0 8px 2px}
+    .met-section:first-child{margin-top:0}
+    .met-now-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
+    .met-card{background:var(--surf);border-radius:var(--r);padding:14px 12px;box-shadow:var(--sh);display:flex;flex-direction:column;gap:4px}
+    .met-card-ico{font-size:26px;line-height:1}
+    .met-card-v{font-size:22px;font-weight:900;color:var(--text);line-height:1.1;margin-top:2px}
+    .met-card-l{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+    .met-card-sub{font-size:11px;color:var(--muted);margin-top:1px}
+    .met-cond{background:var(--surf);border-radius:var(--r);padding:14px 16px;box-shadow:var(--sh);display:flex;align-items:center;gap:12px;margin-bottom:4px}
+    .met-cond-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+    .met-cond-dot.good{background:#10b981}
+    .met-cond-dot.ok{background:#f59e0b}
+    .met-cond-dot.bad{background:#f43f5e}
+    .met-cond-txt{flex:1}
+    .met-cond-title{font-size:14px;font-weight:800;color:var(--text)}
+    .met-cond-sub{font-size:12px;color:var(--text2);margin-top:1px}
+    /* Tide */
+    .tide-card{background:var(--surf);border-radius:var(--r);padding:4px 0;box-shadow:var(--sh)}
+    .tide-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(28,0,254,.06)}
+    .tide-row:last-child{border:none}
+    .tide-ico{font-size:20px;flex-shrink:0;width:28px;text-align:center}
+    .tide-time{font-size:15px;font-weight:800;color:var(--text);flex:1}
+    .tide-type{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+    .tide-type.pm{color:var(--sea)}
+    .tide-type.bm{color:var(--text2)}
+    .tide-h{font-size:14px;font-weight:700;color:var(--text)}
+    .tide-coef{font-size:11px;color:var(--muted);text-align:right}
+    /* Forecast strip */
+    .forecast-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+    .fc-card{background:var(--surf);border-radius:12px;padding:10px 6px;box-shadow:var(--sh);text-align:center;display:flex;flex-direction:column;gap:3px;align-items:center}
+    .fc-day{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase}
+    .fc-ico{font-size:20px;line-height:1;margin:2px 0}
+    .fc-temp{font-size:13px;font-weight:800;color:var(--text)}
+    .fc-wind{font-size:10px;color:var(--text2);font-weight:600}
+    /* Loading/error */
+    .met-loading{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
     /* Empty */
     .empty{text-align:center;padding:60px 24px;color:var(--muted)}
     .empty-ico{font-size:48px;margin-bottom:12px;opacity:.5}
@@ -309,7 +348,7 @@
       <span>⚓</span>
       <div class="logo-txt">
         <h1>MAZ Fishing</h1>
-        <p>Dunkerque · Pêche sur épave</p>
+        <p>Dunkerque</p>
       </div>
     </div>
     <div class="h-stats">
@@ -408,6 +447,13 @@
       <div id="slist"></div>
     </div>
 
+    <!-- MÉTÉO -->
+    <div class="panel" id="p-meteo">
+      <div class="met-scroll" id="met-scroll">
+        <div class="met-loading">⏳ Chargement météo…</div>
+      </div>
+    </div>
+
     <!-- PÊCHES -->
     <div class="panel" id="p-peches">
       <div class="peches-stats">
@@ -457,6 +503,13 @@
         <path d="M5 5c2-2 5-3 7-3s5 1 7 3"/>
       </svg>
       Pêches
+      <div class="tab-dot"></div>
+    </button>
+    <button class="tab-btn" id="nt-meteo" onclick="showP('meteo')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/>
+      </svg>
+      Météo
       <div class="tab-dot"></div>
     </button>
   </nav>

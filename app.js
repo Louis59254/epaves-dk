@@ -34,7 +34,7 @@ function initMap() {
     maxZoom: 18, opacity: 0.75
   }).addTo(map);
 
-  L.control.attribution({ prefix: '© OSM · OpenSeaMap · dkepaves.free.fr' }).addTo(map);
+  L.control.attribution({ prefix: '© OSM · OpenSeaMap' }).addTo(map);
 
   cluster = L.markerClusterGroup({
     maxClusterRadius: 40,
@@ -197,6 +197,7 @@ function showP(id) {
   if (id === 'map') setTimeout(() => map.invalidateSize(), 60);
   if (id === 'spots') renderSpots();
   if (id === 'peches') renderPeches();
+  if (id === 'meteo') loadMeteo();
   document.getElementById('map-filters').classList.remove('open');
 }
 
@@ -712,4 +713,199 @@ function toast(msg, dur = 2600) {
   t.classList.add('on');
   clearTimeout(t._t);
   t._t = setTimeout(() => t.classList.remove('on'), dur);
+}
+
+// ── MÉTÉO / MARÉES ────────────────────────────────────────────────────────────
+
+// Harmoniques de marée pour Dunkerque (source SHOM)
+const TIDE_REF = Date.UTC(1900, 0, 1, 0, 0, 0);
+const DK_CONST = [
+  { A: 3.09, s: 28.9841, G: 132.5 }, // M2
+  { A: 0.93, s: 30.0000, G: 163.7 }, // S2
+  { A: 0.57, s: 28.4397, G: 112.7 }, // N2
+  { A: 0.25, s: 30.0821, G: 163.1 }, // K2
+  { A: 0.17, s: 57.9682, G:  58.5 }, // M4
+  { A: 0.10, s: 15.0411, G: 289.1 }, // K1
+  { A: 0.09, s: 58.9841, G:  95.0 }, // MS4
+  { A: 0.07, s: 13.9430, G: 265.6 }, // O1
+  { A: 0.03, s: 14.9589, G: 288.8 }, // P1
+];
+const DK_MSL = 3.00;
+
+function tideH(ms) {
+  const h = (ms - TIDE_REF) / 3600000;
+  return DK_MSL + DK_CONST.reduce((s, c) => s + c.A * Math.cos((c.s * h - c.G) * Math.PI / 180), 0);
+}
+
+function computeTideExtrema(startMs, durationH) {
+  const step = 5 * 60 * 1000; // 5 min
+  const pts = [];
+  for (let t = startMs; t <= startMs + durationH * 3600000; t += step) {
+    pts.push({ t, h: tideH(t) });
+  }
+  const extrema = [];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p = pts[i - 1].h, c = pts[i].h, n = pts[i + 1].h;
+    if (c > p && c > n) extrema.push({ t: pts[i].t, h: c, type: 'PM' });
+    if (c < p && c < n) extrema.push({ t: pts[i].t, h: c, type: 'BM' });
+  }
+  return extrema;
+}
+
+function windDir(deg) {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
+  return dirs[Math.round(deg / 22.5) % 16];
+}
+
+function beaufort(kts) {
+  if (kts < 1) return 'B0 Calme';
+  if (kts < 4) return 'B1 Très légère brise';
+  if (kts < 7) return 'B2 Légère brise';
+  if (kts < 11) return 'B3 Petite brise';
+  if (kts < 17) return 'B4 Jolie brise';
+  if (kts < 22) return 'B5 Brise fraîche';
+  if (kts < 28) return 'B6 Vent frais';
+  if (kts < 34) return 'B7 Grand frais';
+  return 'B8+ Coup de vent';
+}
+
+function wmoDesc(code) {
+  if (code === 0)  return ['☀️', 'Ensoleillé'];
+  if (code <= 2)   return ['🌤️', 'Peu nuageux'];
+  if (code <= 3)   return ['☁️', 'Couvert'];
+  if (code <= 48)  return ['🌫️', 'Brouillard'];
+  if (code <= 57)  return ['🌦️', 'Bruine'];
+  if (code <= 67)  return ['🌧️', 'Pluie'];
+  if (code <= 77)  return ['❄️', 'Neige'];
+  if (code <= 82)  return ['🌦️', 'Averses'];
+  if (code <= 86)  return ['❄️', 'Averses neige'];
+  return ['⛈️', 'Orage'];
+}
+
+function fishingCond(windKt, waveM) {
+  if (windKt < 15 && waveM < 0.5) return { cls: 'good', label: 'Excellentes conditions', sub: '✅ Parfait pour sortir !' };
+  if (windKt < 22 && waveM < 1.0) return { cls: 'ok',   label: 'Conditions acceptables', sub: '⚠️ Sortie possible avec précautions' };
+  return { cls: 'bad', label: 'Mer agitée', sub: '🚫 Conditions difficiles — rester à quai' };
+}
+
+function fmtTime(ms) {
+  const d = new Date(ms);
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function dayLabel(i) {
+  const d = new Date(); d.setDate(d.getDate() + i);
+  if (i === 0) return "Auj.";
+  if (i === 1) return "Demain";
+  return d.toLocaleDateString('fr-FR', { weekday: 'short' });
+}
+
+let _meteoLoaded = false;
+
+async function loadMeteo() {
+  if (_meteoLoaded) return;
+  const el = document.getElementById('met-scroll');
+
+  try {
+    // Météo + Marine (Open-Meteo, sans clé API)
+    const [wx, marine] = await Promise.all([
+      fetch('https://api.open-meteo.com/v1/forecast?latitude=51.03&longitude=2.37&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m&daily=weather_code,temperature_2m_max,wind_speed_10m_max&wind_speed_unit=kn&timezone=Europe%2FParis&forecast_days=5').then(r => r.json()),
+      fetch('https://marine-api.open-meteo.com/v1/marine?latitude=51.0&longitude=2.5&current=wave_height,wave_direction,wave_period&forecast_days=1&timezone=Europe%2FParis').then(r => r.json()),
+    ]);
+
+    const cur = wx.current;
+    const waveH = marine.current?.wave_height ?? 0;
+    const waveDir = marine.current?.wave_direction ?? 0;
+    const [ico, desc] = wmoDesc(cur.weather_code);
+    const cond = fishingCond(cur.wind_speed_10m, waveH);
+
+    // Marées — 48h depuis minuit
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const extrema = computeTideExtrema(now.getTime(), 48);
+    // Garder seulement les 6 prochains
+    const upcoming = extrema.filter(e => e.t >= Date.now()).slice(0, 6);
+
+    // Coefficient de marée (estimé via amplitude M2+S2)
+    function tideCoef(h, type) {
+      const range = type === 'PM' ? h - DK_MSL : DK_MSL - h;
+      const maxRange = DK_CONST[0].A + DK_CONST[1].A; // M2 + S2 max
+      return Math.round((range / maxRange) * 120);
+    }
+
+    // Prévisions journalières
+    const days = wx.daily;
+    const forecastCards = days.time.map((_, i) => {
+      const [fIco] = wmoDesc(days.weather_code[i]);
+      return `<div class="fc-card">
+        <div class="fc-day">${dayLabel(i)}</div>
+        <div class="fc-ico">${fIco}</div>
+        <div class="fc-temp">${Math.round(days.temperature_2m_max[i])}°</div>
+        <div class="fc-wind">💨 ${Math.round(days.wind_speed_10m_max[i])} kt</div>
+      </div>`;
+    }).join('');
+
+    const tideRows = upcoming.map(e => {
+      const isPM = e.type === 'PM';
+      const coef = tideCoef(e.h, e.type);
+      return `<div class="tide-row">
+        <div class="tide-ico">${isPM ? '🔼' : '🔽'}</div>
+        <div class="tide-time">${fmtTime(e.t)}</div>
+        <div>
+          <div class="tide-type ${isPM ? 'pm' : 'bm'}">${isPM ? 'Pleine mer' : 'Basse mer'}</div>
+          ${isPM ? `<div class="tide-coef">Coef. ~${coef}</div>` : ''}
+        </div>
+        <div class="tide-h">${e.h.toFixed(1)} m</div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="met-section">🌊 Conditions actuelles</div>
+      <div class="met-now-grid">
+        <div class="met-card">
+          <div class="met-card-ico">${ico}</div>
+          <div class="met-card-v">${Math.round(cur.temperature_2m)}°C</div>
+          <div class="met-card-l">Météo</div>
+          <div class="met-card-sub">${desc}</div>
+        </div>
+        <div class="met-card">
+          <div class="met-card-ico">💨</div>
+          <div class="met-card-v">${Math.round(cur.wind_speed_10m)} kt</div>
+          <div class="met-card-l">Vent · ${windDir(cur.wind_direction_10m)}</div>
+          <div class="met-card-sub">${beaufort(cur.wind_speed_10m)}</div>
+        </div>
+        <div class="met-card">
+          <div class="met-card-ico">🌊</div>
+          <div class="met-card-v">${waveH.toFixed(1)} m</div>
+          <div class="met-card-l">Vagues</div>
+          <div class="met-card-sub">Dir. ${windDir(waveDir)} · T ${(marine.current?.wave_period ?? 0).toFixed(0)}s</div>
+        </div>
+        <div class="met-card">
+          <div class="met-card-ico">💨</div>
+          <div class="met-card-v">${Math.round(cur.wind_gusts_10m)} kt</div>
+          <div class="met-card-l">Rafales</div>
+          <div class="met-card-sub">Max prévues</div>
+        </div>
+      </div>
+      <div class="met-cond">
+        <div class="met-cond-dot ${cond.cls}"></div>
+        <div class="met-cond-txt">
+          <div class="met-cond-title">${cond.label}</div>
+          <div class="met-cond-sub">${cond.sub}</div>
+        </div>
+      </div>
+
+      <div class="met-section">🌊 Marées — Dunkerque</div>
+      <div class="tide-card">${tideRows || '<div class="tide-row"><div style="color:var(--muted);font-size:13px">Calcul en cours…</div></div>'}</div>
+      <div style="font-size:10px;color:var(--muted);margin:6px 2px 0">Prédiction harmonique SHOM — indicatif, non certifié</div>
+
+      <div class="met-section">📅 Prévisions 5 jours</div>
+      <div class="forecast-strip">${forecastCards}</div>
+    `;
+    _meteoLoaded = true;
+    // Rafraîchir toutes les 30 minutes
+    setTimeout(() => { _meteoLoaded = false; }, 30 * 60 * 1000);
+
+  } catch (e) {
+    el.innerHTML = `<div class="met-loading">❌ Impossible de charger la météo.<br><small>Vérifiez votre connexion.</small></div>`;
+  }
 }
