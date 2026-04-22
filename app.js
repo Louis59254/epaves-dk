@@ -801,60 +801,69 @@ function dayLabel(i) {
 }
 
 let _meteoLoaded = false;
+let _hourlyWx = null;
+let _hourlyMarine = null;
+
+function tideCoef(h, type) {
+  const range = type === 'PM' ? h - DK_MSL : DK_MSL - h;
+  return Math.max(20, Math.min(120, Math.round((range / (DK_CONST[0].A + DK_CONST[1].A)) * 120)));
+}
 
 async function loadMeteo() {
   if (_meteoLoaded) return;
   const el = document.getElementById('met-scroll');
 
   try {
-    // Météo + Marine (Open-Meteo, sans clé API)
     const [wx, marine] = await Promise.all([
-      fetch('https://api.open-meteo.com/v1/forecast?latitude=51.03&longitude=2.37&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m&daily=weather_code,temperature_2m_max,wind_speed_10m_max&wind_speed_unit=kn&timezone=Europe%2FParis&forecast_days=5').then(r => r.json()),
-      fetch('https://marine-api.open-meteo.com/v1/marine?latitude=51.0&longitude=2.5&current=wave_height,wave_direction,wave_period&forecast_days=1&timezone=Europe%2FParis').then(r => r.json()),
+      fetch('https://api.open-meteo.com/v1/forecast?latitude=51.03&longitude=2.37&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m&daily=weather_code,temperature_2m_max,wind_speed_10m_max&wind_speed_unit=kn&timezone=Europe%2FParis&forecast_days=5').then(r => r.json()),
+      fetch('https://marine-api.open-meteo.com/v1/marine?latitude=51.0&longitude=2.5&current=wave_height,wave_direction,wave_period&hourly=wave_height,wave_period,wave_direction&forecast_days=5&timezone=Europe%2FParis').then(r => r.json()),
     ]);
 
-    const cur = wx.current;
+    _hourlyWx     = wx.hourly;
+    _hourlyMarine = marine.hourly;
+
+    const cur   = wx.current;
     const waveH = marine.current?.wave_height ?? 0;
     const waveDir = marine.current?.wave_direction ?? 0;
     const [ico, desc] = wmoDesc(cur.weather_code);
-    const cond = fishingCond(cur.wind_speed_10m, waveH);
+    const cond  = fishingCond(cur.wind_speed_10m, waveH);
 
-    // Marées — 48h depuis minuit
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    const extrema = computeTideExtrema(now.getTime(), 48);
-    // Garder seulement les 6 prochains
-    const upcoming = extrema.filter(e => e.t >= Date.now()).slice(0, 6);
+    // Marées 5 jours groupées par date
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const allTides = computeTideExtrema(todayStart.getTime(), 5 * 24);
+    const tidesByDay = {};
+    allTides.forEach(e => {
+      const key = new Date(e.t).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
+      (tidesByDay[key] = tidesByDay[key] || []).push(e);
+    });
 
-    // Coefficient de marée (estimé via amplitude M2+S2)
-    function tideCoef(h, type) {
-      const range = type === 'PM' ? h - DK_MSL : DK_MSL - h;
-      const maxRange = DK_CONST[0].A + DK_CONST[1].A; // M2 + S2 max
-      return Math.round((range / maxRange) * 120);
-    }
+    const tidesHTML = Object.entries(tidesByDay).map(([label, events]) => {
+      const rows = events.map(e => {
+        const isPM = e.type === 'PM';
+        return `<div class="tide-row">
+          <div class="tide-ico">${isPM ? '🔼' : '🔽'}</div>
+          <div class="tide-time">${fmtTime(e.t)}</div>
+          <div>
+            <div class="tide-type ${isPM ? 'pm' : 'bm'}">${isPM ? 'Pleine mer' : 'Basse mer'}</div>
+            ${isPM ? `<div class="tide-coef">Coef. ~${tideCoef(e.h,'PM')}</div>` : ''}
+          </div>
+          <div class="tide-h">${e.h.toFixed(1)} m</div>
+        </div>`;
+      }).join('');
+      return `<div class="tide-day-label">${label.charAt(0).toUpperCase()+label.slice(1)}</div>
+              <div class="tide-card">${rows}</div>`;
+    }).join('');
 
-    // Prévisions journalières
+    // Prévisions — cartes cliquables
     const days = wx.daily;
     const forecastCards = days.time.map((_, i) => {
       const [fIco] = wmoDesc(days.weather_code[i]);
-      return `<div class="fc-card">
+      return `<div class="fc-card" id="fc-${i}" onclick="toggleDayDetail(${i})">
         <div class="fc-day">${dayLabel(i)}</div>
         <div class="fc-ico">${fIco}</div>
         <div class="fc-temp">${Math.round(days.temperature_2m_max[i])}°</div>
-        <div class="fc-wind">💨 ${Math.round(days.wind_speed_10m_max[i])} kt</div>
-      </div>`;
-    }).join('');
-
-    const tideRows = upcoming.map(e => {
-      const isPM = e.type === 'PM';
-      const coef = tideCoef(e.h, e.type);
-      return `<div class="tide-row">
-        <div class="tide-ico">${isPM ? '🔼' : '🔽'}</div>
-        <div class="tide-time">${fmtTime(e.t)}</div>
-        <div>
-          <div class="tide-type ${isPM ? 'pm' : 'bm'}">${isPM ? 'Pleine mer' : 'Basse mer'}</div>
-          ${isPM ? `<div class="tide-coef">Coef. ~${coef}</div>` : ''}
-        </div>
-        <div class="tide-h">${e.h.toFixed(1)} m</div>
+        <div class="fc-wind">💨${Math.round(days.wind_speed_10m_max[i])}kt</div>
+        <div class="fc-chev">▾</div>
       </div>`;
     }).join('');
 
@@ -877,13 +886,13 @@ async function loadMeteo() {
           <div class="met-card-ico">🌊</div>
           <div class="met-card-v">${waveH.toFixed(1)} m</div>
           <div class="met-card-l">Vagues</div>
-          <div class="met-card-sub">Dir. ${windDir(waveDir)} · T ${(marine.current?.wave_period ?? 0).toFixed(0)}s</div>
+          <div class="met-card-sub">Dir. ${windDir(waveDir)} · ${(marine.current?.wave_period??0).toFixed(0)}s</div>
         </div>
         <div class="met-card">
           <div class="met-card-ico">💨</div>
           <div class="met-card-v">${Math.round(cur.wind_gusts_10m)} kt</div>
-          <div class="met-card-l">Rafales</div>
-          <div class="met-card-sub">Max prévues</div>
+          <div class="met-card-l">Rafales max</div>
+          <div class="met-card-sub">Prévues aujourd'hui</div>
         </div>
       </div>
       <div class="met-cond">
@@ -894,18 +903,53 @@ async function loadMeteo() {
         </div>
       </div>
 
-      <div class="met-section">🌊 Marées — Dunkerque</div>
-      <div class="tide-card">${tideRows || '<div class="tide-row"><div style="color:var(--muted);font-size:13px">Calcul en cours…</div></div>'}</div>
-      <div style="font-size:10px;color:var(--muted);margin:6px 2px 0">Prédiction harmonique SHOM — indicatif, non certifié</div>
-
-      <div class="met-section">📅 Prévisions 5 jours</div>
+      <div class="met-section">📅 Prévisions — toucher pour le détail</div>
       <div class="forecast-strip">${forecastCards}</div>
+      <div id="day-detail-wrap"></div>
+
+      <div class="met-section">🌊 Marées — Dunkerque (5 jours)</div>
+      ${tidesHTML}
+      <div style="font-size:10px;color:var(--muted);margin:6px 2px 16px">Prédiction harmonique SHOM — indicatif</div>
     `;
+
     _meteoLoaded = true;
-    // Rafraîchir toutes les 30 minutes
     setTimeout(() => { _meteoLoaded = false; }, 30 * 60 * 1000);
 
-  } catch (e) {
+  } catch(err) {
     el.innerHTML = `<div class="met-loading">❌ Impossible de charger la météo.<br><small>Vérifiez votre connexion.</small></div>`;
   }
+}
+
+function toggleDayDetail(dayIdx) {
+  const wrap = document.getElementById('day-detail-wrap');
+  const isOpen = wrap.dataset.day == dayIdx && wrap.innerHTML;
+
+  document.querySelectorAll('.fc-card').forEach((c, i) => c.classList.toggle('active', !isOpen && i === dayIdx));
+
+  if (isOpen) { wrap.innerHTML = ''; wrap.dataset.day = ''; return; }
+
+  const SLOTS = [[6,'Matin'],[10,'Matinée'],[14,'Après-midi'],[18,'Soir']];
+  const rows = SLOTS.map(([h, label]) => {
+    const idx  = dayIdx * 24 + h;
+    const [sico] = wmoDesc(_hourlyWx.weather_code[idx] ?? 0);
+    const wind  = Math.round(_hourlyWx.wind_speed_10m[idx] ?? 0);
+    const gusts = Math.round(_hourlyWx.wind_gusts_10m[idx] ?? 0);
+    const temp  = Math.round(_hourlyWx.temperature_2m[idx] ?? 0);
+    const wave  = +(_hourlyMarine.wave_height[idx] ?? 0);
+    const dir   = windDir(_hourlyWx.wind_direction_10m[idx] ?? 0);
+    const cond  = fishingCond(wind, wave);
+    return `<div class="dslot">
+      <div class="dslot-label">${label}<small>${h}h00</small></div>
+      <div class="dslot-ico">${sico}</div>
+      <div class="dslot-info">
+        <div class="dslot-temp">${temp}°C</div>
+        <div class="dslot-meta">💨 ${wind} kt ${dir} — rafales ${gusts} kt</div>
+        <div class="dslot-meta">🌊 ${wave.toFixed(1)} m · ${beaufort(wind)}</div>
+      </div>
+      <div class="dslot-dot ${cond.cls}" title="${cond.label}"></div>
+    </div>`;
+  }).join('');
+
+  wrap.dataset.day = dayIdx;
+  wrap.innerHTML = `<div class="day-detail">${rows}</div>`;
 }

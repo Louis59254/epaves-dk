@@ -329,11 +329,33 @@
     .tide-coef{font-size:11px;color:var(--muted);text-align:right}
     /* Forecast strip */
     .forecast-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-    .fc-card{background:var(--surf);border-radius:12px;padding:10px 6px;box-shadow:var(--sh);text-align:center;display:flex;flex-direction:column;gap:3px;align-items:center}
+    .fc-card{background:var(--surf);border-radius:12px;padding:10px 6px;box-shadow:var(--sh);text-align:center;display:flex;flex-direction:column;gap:3px;align-items:center;cursor:pointer;transition:all .15s;position:relative}
+    .fc-card:active{transform:scale(.96)}
+    .fc-card.active{background:var(--sea);box-shadow:0 4px 16px rgba(28,0,254,.3)}
+    .fc-card.active .fc-day,.fc-card.active .fc-temp,.fc-card.active .fc-wind,.fc-card.active .fc-chev{color:#fff}
     .fc-day{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase}
     .fc-ico{font-size:20px;line-height:1;margin:2px 0}
     .fc-temp{font-size:13px;font-weight:800;color:var(--text)}
     .fc-wind{font-size:10px;color:var(--text2);font-weight:600}
+    .fc-chev{font-size:11px;color:var(--muted);margin-top:1px;transition:transform .2s}
+    .fc-card.active .fc-chev{transform:rotate(180deg)}
+    /* Day detail */
+    .day-detail{background:var(--surf);border-radius:var(--r);margin-bottom:8px;box-shadow:var(--sh);overflow:hidden;animation:fadeIn .2s ease}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+    .dslot{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid rgba(28,0,254,.06)}
+    .dslot:last-child{border:none}
+    .dslot-label{font-size:11px;font-weight:700;color:var(--muted);min-width:58px;line-height:1.4}
+    .dslot-label small{display:block;font-size:10px;font-weight:500}
+    .dslot-ico{font-size:20px;flex-shrink:0}
+    .dslot-info{flex:1;min-width:0}
+    .dslot-temp{font-size:14px;font-weight:800;color:var(--text)}
+    .dslot-meta{font-size:11px;color:var(--text2);margin-top:2px}
+    .dslot-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+    .dslot-dot.good{background:#10b981}
+    .dslot-dot.ok{background:#f59e0b}
+    .dslot-dot.bad{background:#f43f5e}
+    /* Tide by day */
+    .tide-day-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:capitalize;margin:10px 2px 5px}
     /* Loading/error */
     .met-loading{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
     /* Empty */
