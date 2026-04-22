@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#060f1c">
+  <meta name="description" content="245 épaves au large de Dunkerque — carte nautique interactive, GPS, spots pêche.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Épaves DK</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <style>
+    :root {
+      --ink:    #060f1c; --ink1: #0d1f35; --ink2: #162f4a; --ink3: #1e3f60;
+      --sea:    #00c2e0; --sea2: #0ea5e9;
+      --gold:   #f59e0b; --green: #10b981; --red: #f43f5e;
+      --violet: #a78bfa; --orange: #fb923c;
+      --muted:  #64748b; --text: #e2e8f0; --text2: #94a3b8;
+      --r: 12px; --rb: 20px;
+      --sh: 0 8px 32px rgba(0,0,0,.5);
+      --tab: 62px; --safe: env(safe-area-inset-bottom,0px);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;background:var(--ink);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;overflow:hidden}
+    #app{display:flex;flex-direction:column;height:100%}
+    #panels{flex:1;overflow:hidden;position:relative}
+
+    /* Header */
+    header{background:var(--ink1);border-bottom:1px solid rgba(255,255,255,.06);padding:10px 14px 8px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+    .logo{display:flex;align-items:center;gap:8px}
+    .logo span{font-size:22px}
+    .logo-txt h1{font-size:17px;font-weight:800;color:var(--sea);letter-spacing:-.3px}
+    .logo-txt p{font-size:11px;color:var(--muted);margin-top:1px}
+    .h-stats{margin-left:auto;display:flex;gap:6px}
+    .stat-pill{background:var(--ink2);border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:5px 10px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px}
+    .stat-pill b{color:var(--sea)}
+    .gps-btn{background:var(--ink2);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);display:flex;align-items:center;gap:5px;transition:all .2s}
+    .gps-btn.on{color:var(--green);border-color:rgba(16,185,129,.4);background:rgba(16,185,129,.08)}
+    .gps-btn svg{width:14px;height:14px}
+
+    /* Nav */
+    nav{display:flex;background:var(--ink1);border-top:1px solid rgba(255,255,255,.06);height:calc(var(--tab) + var(--safe));padding-bottom:var(--safe);flex-shrink:0}
+    .tab-btn{flex:1;border:none;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);font-size:10px;font-weight:600;cursor:pointer;transition:color .2s;letter-spacing:.3px;text-transform:uppercase}
+    .tab-btn svg{width:21px;height:21px}
+    .tab-btn.on{color:var(--sea)}
+    .tab-dot{width:4px;height:4px;border-radius:50%;background:var(--sea);opacity:0;transition:opacity .2s}
+    .tab-btn.on .tab-dot{opacity:1}
+
+    /* Panels */
+    .panel{position:absolute;inset:0;display:none}
+    .panel.on{display:flex;flex-direction:column}
+
+    /* MAP */
+    #leaflet-map{flex:1}
+    .map-ov{position:absolute;z-index:500;background:var(--ink1);border:1px solid rgba(255,255,255,.08);border-radius:var(--rb);box-shadow:var(--sh)}
+    #msearch-wrap{top:10px;left:10px;right:10px;display:flex;align-items:center;gap:8px;padding:10px 14px}
+    #msearch-wrap svg{width:16px;height:16px;color:var(--muted);flex-shrink:0}
+    #msearch{flex:1;background:transparent;border:none;color:var(--text);font-size:14px;outline:none}
+    #msearch::placeholder{color:var(--muted)}
+    #mbadge{background:rgba(0,194,224,.12);color:var(--sea);border-radius:12px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap}
+    .fab{position:absolute;right:12px;width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;z-index:500;transition:all .15s;box-shadow:var(--sh)}
+    .fab svg{width:20px;height:20px}
+    .fab:active{transform:scale(.93)}
+    #fab-me{bottom:12px;background:var(--sea);color:var(--ink)}
+    #fab-filter{bottom:64px;background:var(--ink1);color:var(--text);border:1px solid rgba(255,255,255,.08)}
+    #map-filters{bottom:116px;right:12px;left:12px;padding:14px 16px;display:none;flex-direction:column;gap:10px}
+    #map-filters.open{display:flex}
+    #map-filters h4{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700}
+    .fchips{display:flex;flex-wrap:wrap;gap:6px}
+    .chip{background:var(--ink2);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--text2);white-space:nowrap;transition:all .15s}
+    .chip.on{background:var(--sea);color:var(--ink);border-color:var(--sea);font-weight:700}
+
+    /* LIST */
+    .list-top{background:var(--ink1);border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0;padding:10px 12px}
+    .srow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .swrap{flex:1;position:relative}
+    .sinput{width:100%;background:var(--ink2);border:1px solid rgba(255,255,255,.08);border-radius:var(--r);padding:9px 12px 9px 36px;color:var(--text);font-size:14px;outline:none}
+    .sinput::placeholder{color:var(--muted)}
+    .sico{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--muted);pointer-events:none}
+    .sortrow{display:flex;gap:5px;align-items:center;overflow-x:auto;scrollbar-width:none}
+    .sortrow::-webkit-scrollbar{display:none}
+    .sortrow span{font-size:11px;color:var(--muted);white-space:nowrap}
+    .sbtn{background:var(--ink2);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:5px 11px;font-size:11px;cursor:pointer;color:var(--text2);white-space:nowrap;transition:all .15s}
+    .sbtn.on{background:rgba(0,194,224,.15);color:var(--sea);border-color:rgba(0,194,224,.3)}
+    .qfrow{display:flex;gap:6px;overflow-x:auto;padding:8px 12px 0;scrollbar-width:none;flex-shrink:0}
+    .qfrow::-webkit-scrollbar{display:none}
+    .qf{background:var(--ink2);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:6px 13px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);white-space:nowrap;transition:all .15s;flex-shrink:0}
+    .qf.on{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+    #wlist{flex:1;overflow-y:auto;padding:8px 12px 12px;-webkit-overflow-scrolling:touch}
+    #wlist::-webkit-scrollbar{display:none}
+
+    /* Card */
+    .wc{background:var(--ink1);border:1px solid rgba(255,255,255,.05);border-radius:var(--r);padding:12px 12px 10px 15px;margin-bottom:8px;cursor:pointer;position:relative;overflow:hidden;transition:background .15s,transform .1s;display:flex;flex-direction:column;gap:6px}
+    .wc::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+    .wc:active{transform:scale(.985)}
+    .wc-top{display:flex;align-items:flex-start;gap:8px}
+    .wc-ico{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+    .wc-info{flex:1;min-width:0}
+    .wc-name{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .wc-sub{font-size:11px;color:var(--text2);margin-top:1px}
+    .wc-r{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+    .dpill{font-size:13px;font-weight:800;padding:3px 9px;border-radius:20px}
+    .wmeta{display:flex;gap:5px;flex-wrap:wrap}
+    .tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+    .ty{background:rgba(245,158,11,.1);color:var(--gold)}
+    .td{background:rgba(244,63,94,.1);color:var(--red)}
+    .tg{background:rgba(16,185,129,.1);color:var(--green)}
+    .ts{background:rgba(0,194,224,.1);color:var(--sea)}
+    .tl{background:rgba(245,158,11,.15);color:var(--gold)}
+    .wgps{font-size:10px;color:var(--muted);font-family:monospace}
+
+    /* SPOTS */
+    .spots-hd{background:var(--ink1);border-bottom:1px solid rgba(255,255,255,.06);padding:12px;flex-shrink:0}
+    .add-btn{width:100%;background:linear-gradient(135deg,var(--gold) 0%,#f97316 100%);border:none;border-radius:var(--r);padding:14px;font-size:15px;font-weight:700;color:var(--ink);display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:opacity .15s}
+    .add-btn:active{opacity:.88}
+    .add-btn svg{width:18px;height:18px}
+    #slist{flex:1;overflow-y:auto;padding:10px 12px;-webkit-overflow-scrolling:touch}
+    #slist::-webkit-scrollbar{display:none}
+    .sc{background:var(--ink1);border:1px solid rgba(255,255,255,.05);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+    .sc-ico{width:38px;height:38px;border-radius:10px;background:rgba(245,158,11,.12);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+    .sc-info{flex:1}
+    .sc-name{font-size:14px;font-weight:700}
+    .sc-gps{font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px}
+    .sc-del{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:8px;transition:all .15s}
+    .sc-del:active{background:rgba(244,63,94,.15);color:var(--red)}
+    .sc-del svg{width:18px;height:18px}
+
+    /* PÊCHES panel */
+    .peches-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px;background:var(--ink1);border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0}
+    .p-stat{background:var(--ink2);border-radius:var(--r);padding:10px;text-align:center}
+    .p-stat-v{font-size:20px;font-weight:800;color:var(--sea)}
+    .p-stat-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+    .peches-hd{padding:10px 12px;flex-shrink:0}
+    .add-btn-fish{width:100%;background:linear-gradient(135deg,var(--green) 0%,#059669 100%);border:none;border-radius:var(--r);padding:14px;font-size:15px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:opacity .15s}
+    .add-btn-fish:active{opacity:.88}
+    .pe-list{flex:1;overflow-y:auto;padding:0 12px 12px;-webkit-overflow-scrolling:touch}
+    .pe-list::-webkit-scrollbar{display:none}
+
+    /* Session card */
+    .sec-card{background:var(--ink1);border:1px solid rgba(255,255,255,.05);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;cursor:pointer;position:relative;transition:background .15s}
+    .sec-card:active{background:var(--ink2)}
+    .sec-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+    .sec-date{font-size:11px;color:var(--muted);margin-bottom:2px}
+    .sec-wreck{font-size:15px;font-weight:700}
+    .sec-counts{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+    .sec-badge{background:rgba(0,194,224,.12);color:var(--sea);border-radius:20px;padding:3px 9px;font-size:11px;font-weight:700;white-space:nowrap}
+    .sec-rel{background:rgba(245,158,11,.1);color:var(--gold)}
+    .sec-cond{font-size:11px;color:var(--text2);margin-bottom:5px}
+    .sec-species{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px}
+    .sec-best{font-size:12px;color:var(--green);font-weight:600;margin-bottom:4px}
+    .sec-note{font-size:12px;color:var(--text2);font-style:italic;margin-top:4px;border-top:1px solid rgba(255,255,255,.05);padding-top:6px}
+    .sec-del{position:absolute;top:10px;right:10px;background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;transition:all .15s}
+    .sec-del:active{background:rgba(244,63,94,.15);color:var(--red)}
+
+    /* Session form modal */
+    #sfbg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1100;display:none;align-items:flex-end}
+    #sfbg.open{display:flex}
+    #sfmodal{background:var(--ink1);border-radius:22px 22px 0 0;width:100%;max-height:92vh;overflow-y:auto;padding-bottom:calc(32px + var(--safe));animation:su .3s cubic-bezier(.32,.72,0,1)}
+    #sfmodal::-webkit-scrollbar{display:none}
+    .sf-hd{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 10px}
+    .sf-title{font-size:18px;font-weight:800}
+    .sfl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin:14px 20px 6px}
+    .sfinput{display:block;width:calc(100% - 40px);margin:0 20px;background:var(--ink2);border:1px solid rgba(255,255,255,.08);border-radius:var(--r);padding:11px 14px;color:var(--text);font-size:14px;outline:none;font-family:inherit}
+    .sfinput:focus{border-color:rgba(0,194,224,.4)}
+    textarea.sfinput{resize:none;min-height:72px}
+    .sf-pills{display:flex;gap:6px;flex-wrap:wrap;padding:0 20px}
+    .sfp{background:var(--ink2);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);transition:all .15s;white-space:nowrap}
+    .sfp.on{background:var(--sea);color:var(--ink);border-color:var(--sea)}
+    .sf-search-wrap{position:relative;margin:0 20px}
+    .sf-search-wrap .sfinput{width:100%;margin:0}
+    .sf-drop{position:absolute;top:100%;left:0;right:0;background:var(--ink2);border:1px solid rgba(255,255,255,.1);border-top:none;border-radius:0 0 var(--r) var(--r);z-index:10;overflow:hidden;max-height:180px;overflow-y:auto}
+    .sf-drop-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);display:flex;justify-content:space-between;align-items:center}
+    .sf-drop-item:last-child{border:none}
+    .sf-drop-item:active{background:var(--ink3)}
+    .sf-sel{display:flex;align-items:center;justify-content:space-between;background:rgba(0,194,224,.1);border:1px solid rgba(0,194,224,.25);border-radius:var(--r);padding:10px 14px;margin:0 20px;font-size:13px;font-weight:600;color:var(--sea)}
+    .sf-sel button{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0 4px;line-height:1}
+    .sf-catches-hd{display:flex;align-items:center;justify-content:space-between;margin:14px 20px 8px}
+    .sf-add-catch{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);color:var(--green);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s}
+    .sf-add-catch:active{background:rgba(16,185,129,.2)}
+    .catch-row{margin:0 20px 8px;background:var(--ink2);border-radius:var(--r);padding:10px 12px;border:1px solid rgba(255,255,255,.05)}
+    .cr-top{display:flex;gap:6px;margin-bottom:6px;align-items:center}
+    .cr-bot{display:flex;gap:6px}
+    .cr-inp{background:var(--ink3);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;font-family:inherit;min-width:0}
+    .cr-inp::placeholder{color:var(--muted)}
+    .cr-inp:focus{border-color:rgba(0,194,224,.3)}
+    .cr-species{flex:2}
+    .cr-tech{flex:2}
+    .cr-weight,.cr-size{flex:1;-moz-appearance:textfield;width:0}
+    .cr-weight::-webkit-outer-spin-button,.cr-weight::-webkit-inner-spin-button,.cr-size::-webkit-outer-spin-button,.cr-size::-webkit-inner-spin-button{-webkit-appearance:none}
+    .cr-kept{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.2);color:var(--green);border-radius:8px;padding:6px 8px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
+    .cr-kept.released{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.2);color:var(--gold)}
+    .cr-del{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px 6px;font-size:16px;flex-shrink:0;line-height:1}
+    .sf-save{display:block;width:calc(100% - 40px);margin:16px 20px 0;background:linear-gradient(135deg,var(--green) 0%,#059669 100%);border:none;border-radius:var(--r);padding:15px;font-size:16px;font-weight:800;color:#fff;cursor:pointer;transition:opacity .15s}
+    .sf-save:active{opacity:.85}
+
+    /* Modal */
+    #mbg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:none;align-items:flex-end}
+    #mbg.open{display:flex}
+    #modal{background:var(--ink1);border-radius:22px 22px 0 0;width:100%;max-height:92vh;overflow-y:auto;padding-bottom:calc(28px + var(--safe));animation:su .3s cubic-bezier(.32,.72,0,1)}
+    @keyframes su{from{transform:translateY(100%)}to{transform:translateY(0)}}
+    #modal::-webkit-scrollbar{display:none}
+    .mhandle{width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.15);margin:14px auto 0}
+    .mhero{padding:16px 20px 0;display:flex;align-items:flex-start;gap:14px}
+    .mico{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+    .mtitle{flex:1}
+    .mname{font-size:22px;font-weight:900;line-height:1.1}
+    .mtype{font-size:13px;color:var(--text2);margin-top:4px}
+    .mclose{background:var(--ink2);border:none;color:var(--text2);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+    .mtags{display:flex;gap:6px;flex-wrap:wrap;padding:10px 20px 0}
+    .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px 20px 0}
+    .sbox{background:var(--ink2);border-radius:var(--r);padding:12px}
+    .sbox-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+    .sbox-v{font-size:20px;font-weight:800;margin-top:3px}
+    .gpsb{margin:12px 20px 0;background:var(--ink2);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:10px}
+    .gpsb-i{flex:1}
+    .gpsb-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+    .gpsb-v{font-family:monospace;font-size:13px;color:var(--sea)}
+    .cpybtn{background:rgba(0,194,224,.12);border:none;color:var(--sea);padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+    .cpybtn:active{background:rgba(0,194,224,.25)}
+    .sec{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:14px 20px 6px;font-weight:700}
+    .ibox{margin:0 20px;background:var(--ink2);border-radius:var(--r);padding:12px 14px}
+    .ibox p{font-size:13px;line-height:1.65;color:var(--text2)}
+    .spgrid{display:flex;gap:8px;flex-wrap:wrap;padding:0 20px}
+    .spc{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--green)}
+    /* Techniques modal */
+    .tech-grid{display:flex;gap:8px;flex-wrap:wrap;padding:0 20px}
+    .tech-chip{background:rgba(0,194,224,.1);border:1px solid rgba(0,194,224,.2);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--sea);white-space:nowrap}
+    .tech-note{font-size:12px;color:var(--text2);line-height:1.65;padding:8px 20px 2px}
+    .tech-season{font-size:12px;color:var(--gold);padding:2px 20px 0;font-weight:600}
+    /* Catches history in modal */
+    .catches-wrap{margin:0 20px}
+    .catch-stat{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+    .catch-stat:last-child{border:none}
+    .catch-sp{font-size:13px;font-weight:700;flex:1}
+    .catch-n{font-size:12px;color:var(--sea);font-weight:700;background:rgba(0,194,224,.1);border-radius:20px;padding:2px 8px}
+    .catch-rec{font-size:11px;color:var(--green);background:rgba(16,185,129,.1);border-radius:20px;padding:2px 8px}
+    .madd-session{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);color:var(--green);border-radius:var(--r);padding:13px;font-size:14px;font-weight:700;cursor:pointer;transition:all .15s}
+    .madd-session:active{background:rgba(16,185,129,.2)}
+    .macts{display:flex;gap:8px;padding:16px 20px 0}
+    .ap,.as{flex:1;padding:14px;border-radius:var(--r);border:none;cursor:pointer;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;transition:opacity .15s}
+    .ap{background:var(--sea);color:var(--ink)}
+    .as{background:var(--ink2);color:var(--text)}
+    .ap:active,.as:active{opacity:.83}
+    .ap svg,.as svg{width:16px;height:16px}
+
+    /* Toast */
+    #toast{position:fixed;bottom:calc(var(--tab) + 14px + var(--safe));left:50%;transform:translateX(-50%);background:var(--ink2);border:1px solid rgba(255,255,255,.08);color:var(--text);padding:10px 18px;border-radius:20px;font-size:13px;font-weight:500;z-index:3000;opacity:0;pointer-events:none;transition:opacity .25s;white-space:nowrap}
+    #toast.on{opacity:1}
+
+    /* User marker */
+    .medot{width:16px;height:16px;border-radius:50%;background:var(--sea);border:3px solid #fff;box-shadow:0 0 0 5px rgba(0,194,224,.25)}
+
+    /* Leaflet overrides */
+    .leaflet-container{background:#07141f}
+    .leaflet-popup-content-wrapper{background:var(--ink1);color:var(--text);border-radius:12px;border:1px solid rgba(255,255,255,.08);box-shadow:var(--sh);padding:0}
+    .leaflet-popup-content{margin:12px 14px}
+    .leaflet-popup-tip{background:var(--ink1)}
+    .pname{font-weight:800;font-size:14px}
+    .psub{font-size:11px;color:var(--text2);margin:2px 0 4px}
+    .pdepth{font-size:13px;font-weight:700;margin-bottom:6px}
+    .pbtn{width:100%;background:var(--sea);color:var(--ink);border:none;border-radius:8px;padding:8px;font-size:13px;font-weight:700;cursor:pointer}
+    .leaflet-control-zoom{border:none!important}
+    .leaflet-control-zoom a{background:var(--ink1)!important;color:var(--text)!important;border:1px solid rgba(255,255,255,.08)!important}
+    .leaflet-control-zoom a:hover{background:var(--ink2)!important}
+    .marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background:rgba(0,194,224,.15)!important}
+    .marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background:rgba(0,194,224,.45)!important;color:#fff!important;font-weight:800}
+
+    /* Empty */
+    .empty{text-align:center;padding:60px 24px;color:var(--muted)}
+    .empty-ico{font-size:48px;margin-bottom:12px;opacity:.4}
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">
+      <span>⚓</span>
+      <div class="logo-txt">
+        <h1>Épaves DK</h1>
+        <p>Dunkerque · Pêche sur épave</p>
+      </div>
+    </div>
+    <div class="h-stats">
+      <div class="stat-pill"><b id="h-count">245</b>&nbsp;épaves</div>
+    </div>
+    <button class="gps-btn" id="gps-btn" onclick="toggleGPS()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+      </svg>
+      <span id="gps-lbl">GPS</span>
+    </button>
+  </header>
+
+  <div id="panels">
+
+    <!-- MAP -->
+    <div class="panel on" id="p-map">
+      <div class="map-ov" id="msearch-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input id="msearch" type="search" placeholder="Chercher une épave…" oninput="mapSearch()">
+        <div id="mbadge">245</div>
+      </div>
+      <div id="leaflet-map"></div>
+
+      <div class="map-ov" id="map-filters">
+        <h4>Type de navire</h4>
+        <div class="fchips" id="cat-chips"></div>
+        <h4 style="margin-top:10px">Distance depuis Dunkerque</h4>
+        <div class="fchips" id="dist-chips">
+          <span class="chip on" data-d="999" onclick="setDistF(this)">Toutes</span>
+          <span class="chip" data-d="5"   onclick="setDistF(this)">≤ 5 nm</span>
+          <span class="chip" data-d="10"  onclick="setDistF(this)">≤ 10 nm</span>
+          <span class="chip" data-d="20"  onclick="setDistF(this)">≤ 20 nm</span>
+        </div>
+      </div>
+
+      <button class="fab" id="fab-filter" onclick="toggleMapF()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/>
+          <line x1="11" y1="18" x2="13" y2="18"/>
+        </svg>
+      </button>
+      <button class="fab" id="fab-me" onclick="centerMe()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- LIST -->
+    <div class="panel" id="p-list">
+      <div class="list-top">
+        <div class="srow">
+          <div class="swrap">
+            <svg class="sico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input class="sinput" id="lsearch" type="search" placeholder="Nom, type d'épave…" oninput="renderList()">
+          </div>
+        </div>
+        <div class="sortrow">
+          <span>Trier :</span>
+          <button class="sbtn on" data-s="name"  onclick="setSort(this)">A → Z</button>
+          <button class="sbtn"    data-s="depth" onclick="setSort(this)">Profondeur</button>
+          <button class="sbtn"    data-s="port"  onclick="setSort(this)">Distance port</button>
+          <button class="sbtn"    data-s="dist"  id="sort-gps" style="display:none" onclick="setSort(this)">Ma position</button>
+        </div>
+      </div>
+      <div class="qfrow" id="qfrow">
+        <span class="qf on" data-q="all"     onclick="setQF(this)">Toutes (245)</span>
+        <span class="qf"    data-q="lowtide" onclick="setQF(this)">🏖 Marée basse</span>
+        <span class="qf"    data-q="dynamo"  onclick="setQF(this)">⚔️ Op. Dynamo</span>
+        <span class="qf"    data-q="shallow" onclick="setQF(this)">≤ 15 m</span>
+        <span class="qf"    data-q="deep"    onclick="setQF(this)">≥ 30 m</span>
+        <span class="qf"    data-q="near"    onclick="setQF(this)">≤ 10 nm port</span>
+        <span class="qf"    data-q="chalk"   onclick="setQF(this)">🎣 Chalutiers</span>
+        <span class="qf"    data-q="sub"     onclick="setQF(this)">🔭 Sous-marins</span>
+      </div>
+      <div id="wlist"></div>
+    </div>
+
+    <!-- SPOTS -->
+    <div class="panel" id="p-spots">
+      <div class="spots-hd">
+        <button class="add-btn" onclick="addMySpot()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="16"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          Enregistrer ma position GPS
+        </button>
+      </div>
+      <div id="slist"></div>
+    </div>
+
+    <!-- PÊCHES -->
+    <div class="panel" id="p-peches">
+      <div class="peches-stats">
+        <div class="p-stat"><div class="p-stat-v" id="ps-sessions">0</div><div class="p-stat-l">Sessions</div></div>
+        <div class="p-stat"><div class="p-stat-v" id="ps-prises">0</div><div class="p-stat-l">Prises</div></div>
+        <div class="p-stat"><div class="p-stat-v" id="ps-best">—</div><div class="p-stat-l">Record</div></div>
+      </div>
+      <div class="peches-hd">
+        <button class="add-btn-fish" onclick="openSF()">
+          🎣 &nbsp;Nouvelle session de pêche
+        </button>
+      </div>
+      <div class="pe-list" id="selist"></div>
+    </div>
+
+  </div>
+
+  <nav>
+    <button class="tab-btn on" id="nt-map" onclick="showP('map')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+        <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
+      </svg>
+      Carte
+      <div class="tab-dot"></div>
+    </button>
+    <button class="tab-btn" id="nt-list" onclick="showP('list')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+        <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+      </svg>
+      Épaves
+      <div class="tab-dot"></div>
+    </button>
+    <button class="tab-btn" id="nt-spots" onclick="showP('spots')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+        <circle cx="12" cy="10" r="3"/>
+      </svg>
+      Mes spots
+      <div class="tab-dot"></div>
+    </button>
+    <button class="tab-btn" id="nt-peches" onclick="showP('peches')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 16.5c0 1.5-2.5 3.5-6 3.5s-6-2-6-3.5c0-2 2.5-3.5 6-3.5s6 1.5 6 3.5z"/>
+        <path d="M12 13V7"/><path d="M8.5 9.5S10 7 12 7s3.5 2.5 3.5 2.5"/>
+        <path d="M5 5c2-2 5-3 7-3s5 1 7 3"/>
+      </svg>
+      Pêches
+      <div class="tab-dot"></div>
+    </button>
+  </nav>
+</div>
+
+<!-- WRECK MODAL -->
+<div id="mbg" onclick="closeMBG(event)">
+  <div id="modal">
+    <div class="mhandle"></div>
+    <div class="mhero">
+      <div class="mico" id="m-ico"></div>
+      <div class="mtitle">
+        <div class="mname" id="m-name">—</div>
+        <div class="mtype" id="m-type">—</div>
+      </div>
+      <button class="mclose" onclick="closeModal()">✕</button>
+    </div>
+    <div class="mtags" id="m-tags"></div>
+    <div class="sgrid">
+      <div class="sbox"><div class="sbox-l">Profondeur</div><div class="sbox-v" id="m-depth" style="color:var(--sea)">—</div></div>
+      <div class="sbox"><div class="sbox-l">Année naufrage</div><div class="sbox-v" id="m-year" style="color:var(--gold)">—</div></div>
+      <div class="sbox"><div class="sbox-l">Depuis port DK</div><div class="sbox-v" id="m-port" style="color:var(--text)">—</div></div>
+      <div class="sbox"><div class="sbox-l">Distance (vous)</div><div class="sbox-v" id="m-dist" style="color:var(--green)">—</div></div>
+    </div>
+    <div class="gpsb">
+      <div class="gpsb-i"><div class="gpsb-l">Coordonnées GPS</div><div class="gpsb-v" id="m-gps">—</div></div>
+      <button class="cpybtn" onclick="copyGPS()">Copier</button>
+    </div>
+    <div id="m-note-wrap" style="display:none">
+      <div class="sec">Description</div>
+      <div class="ibox"><p id="m-note"></p></div>
+    </div>
+    <!-- Espèces -->
+    <div class="sec">Espèces attendues</div>
+    <div class="spgrid" id="m-sp"></div>
+    <!-- Techniques -->
+    <div class="sec">Techniques recommandées</div>
+    <div class="tech-grid" id="m-techs"></div>
+    <div class="tech-note" id="m-tech-note"></div>
+    <div class="tech-season" id="m-tech-season"></div>
+    <!-- Mes prises sur cette épave -->
+    <div class="sec" id="m-catches-sec">Mes prises ici</div>
+    <div class="catches-wrap" id="m-catches">
+      <p style="color:var(--muted);font-size:13px">Aucune prise enregistrée sur cette épave.</p>
+    </div>
+    <!-- Actions -->
+    <div style="padding:14px 20px 0">
+      <button class="madd-session" onclick="openSFFromModal()">
+        🎣 &nbsp;Enregistrer une session sur cette épave
+      </button>
+    </div>
+    <div class="macts">
+      <button class="ap" onclick="navToWreck()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+        Naviguer
+      </button>
+      <button class="as" onclick="saveWreck()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        Spot
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- SESSION FORM MODAL -->
+<div id="sfbg" onclick="closeSFBg(event)">
+  <div id="sfmodal">
+    <div class="mhandle"></div>
+    <div class="sf-hd">
+      <div class="sf-title" id="sf-title">🎣 Nouvelle session</div>
+      <button class="mclose" onclick="closeSF()">✕</button>
+    </div>
+
+    <div class="sfl">Date</div>
+    <input type="date" id="sf-date" class="sfinput">
+
+    <div class="sfl">Épave (optionnel)</div>
+    <div class="sf-search-wrap">
+      <input type="search" id="sf-wreck-q" class="sfinput" placeholder="Rechercher une épave…" oninput="filterSFWrecks()" autocomplete="off">
+      <div id="sf-wreck-drop" class="sf-drop"></div>
+    </div>
+    <div id="sf-wreck-sel" style="display:none;margin-top:6px">
+      <!-- filled by JS -->
+    </div>
+
+    <div class="sfl">Marée</div>
+    <div class="sf-pills" id="sf-tide">
+      <span class="sfp" data-v="montante"    onclick="setSFPill(this,'tide')">↑ Montante</span>
+      <span class="sfp" data-v="descendante" onclick="setSFPill(this,'tide')">↓ Descendante</span>
+      <span class="sfp" data-v="étale"       onclick="setSFPill(this,'tide')">→ Étale</span>
+    </div>
+
+    <div class="sfl">État de la mer</div>
+    <div class="sf-pills" id="sf-sea">
+      <span class="sfp" data-v="belle"  onclick="setSFPill(this,'sea')">⛵ Belle</span>
+      <span class="sfp" data-v="agitée" onclick="setSFPill(this,'sea')">〰️ Agitée</span>
+      <span class="sfp" data-v="forte"  onclick="setSFPill(this,'sea')">🌊 Forte</span>
+    </div>
+
+    <div class="sfl">Vent (optionnel)</div>
+    <input type="text" id="sf-wind" class="sfinput" placeholder="Ex : NE 15 kts">
+
+    <div class="sf-catches-hd">
+      <div class="sfl" style="margin:0">Prises</div>
+      <button class="sf-add-catch" onclick="addCatchRow()">+ Ajouter une prise</button>
+    </div>
+    <div id="sf-catches"></div>
+
+    <datalist id="fish-list">
+      <option value="Bar"><option value="Lieu jaune"><option value="Cabillaud">
+      <option value="Merlan"><option value="Congre"><option value="Raie">
+      <option value="Mulet"><option value="Maquereau"><option value="Sole">
+      <option value="Tacaud"><option value="Grondin"><option value="Éperlan">
+    </datalist>
+    <datalist id="tech-list">
+      <option value="Jigging vertical"><option value="Jigging lourd"><option value="Drop shot">
+      <option value="Shad"><option value="Verticale au vif"><option value="Traine lente">
+      <option value="Pêche au fond"><option value="Appât naturel"><option value="Lancer-ramener">
+      <option value="Popper"><option value="Ligne à plumes"><option value="Bas de ligne">
+    </datalist>
+
+    <div class="sfl">Note (optionnel)</div>
+    <textarea id="sf-note" class="sfinput" placeholder="Compte-rendu de la session, conditions, astuces…"></textarea>
+
+    <button class="sf-save" onclick="saveSession()">✓ &nbsp;Enregistrer la session</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="data.js?v=2"></script>
+<script src="app.js?v=2"></script>
+</body>
+</html>
