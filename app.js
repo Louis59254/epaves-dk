@@ -164,11 +164,11 @@ function stopGPS() {
 }
 
 function updateMeDot() {
-  const ico = L.divIcon({ className: '', html: '<div class="medot"></div>', iconSize: [16,16], iconAnchor: [8,8] });
+  const ico = L.divIcon({ className: '', html: '<div class="medot" style="background:#1c00fe;border:3px solid #fff;box-shadow:0 0 0 5px rgba(28,0,254,.25)"></div>', iconSize: [16,16], iconAnchor: [8,8] });
   if (userMarker) userMarker.setLatLng([userLat, userLng]);
   else { userMarker = L.marker([userLat, userLng], { icon: ico, zIndexOffset: 9999 }).addTo(map); userMarker.bindPopup('<b>Vous êtes ici</b>'); }
   if (userCircle) userCircle.setLatLng([userLat, userLng]);
-  else userCircle = L.circle([userLat, userLng], { radius: 300, color: '#00c2e0', fillColor: '#00c2e0', fillOpacity: 0.08, weight: 1 }).addTo(map);
+  else userCircle = L.circle([userLat, userLng], { radius: 300, color: '#1c00fe', fillColor: '#1c00fe', fillOpacity: 0.08, weight: 1 }).addTo(map);
 }
 
 function centerMe() {
@@ -313,14 +313,38 @@ function openModal(id) {
   if (w.note) { document.getElementById('m-note').textContent = w.note; nw.style.display = ''; }
   else nw.style.display = 'none';
 
-  document.getElementById('m-sp').innerHTML = w.species.map(s => `<span class="spc">${s}</span>`).join('');
+  // Espèces — cartes enrichies avec emoji + meilleure saison
+  document.getElementById('m-sp').innerHTML = '<div class="fish-grid">' +
+    (w.species.length ? w.species.map(s => {
+      // species stockées comme "Bar 🐟" — extraire nom et emoji
+      const dbKey = Object.keys(FISH_DB).find(k => s.includes(k)) || '';
+      const f = FISH_DB[dbKey] || { emoji: '🐟', best: '' };
+      const parts = s.split(' ');
+      const emo = parts.length > 1 ? parts[parts.length - 1] : f.emoji;
+      const name = dbKey || s;
+      return `<div class="fish-card">
+        <span class="fish-emo">${emo}</span>
+        <div class="fish-info">
+          <div class="fish-name">${name}</div>
+          ${f.best ? `<div class="fish-best">📅 ${f.best}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('') : '<p style="color:var(--muted);font-size:13px;padding:4px 8px">Données espèces non disponibles</p>') +
+  '</div>';
 
-  // Techniques
+  // Techniques — liste numérotée + conseil + saison
   const tip = getTechniques(w);
   const t   = TECHNIQUES[w.category] || TECHNIQUES.autre;
-  document.getElementById('m-techs').innerHTML = tip.techs.map(tech => `<span class="tech-chip">${tech}</span>`).join('');
-  document.getElementById('m-tech-note').textContent = tip.note;
-  document.getElementById('m-tech-season').textContent = t.saison;
+  document.getElementById('m-techs').innerHTML =
+    '<div class="tech-cards">' +
+      tip.techs.map((tech, i) => `
+        <div class="tech-card">
+          <span class="tech-num">${i + 1}</span>
+          <span class="tech-name">${tech}</span>
+        </div>`).join('') +
+    '</div>' +
+    `<div class="tech-tip-box"><p>💡 ${tip.note}</p></div>` +
+    `<div class="season-pill">🗓 ${t.saison.replace(/^🗓\s*/, '')}</div>`;
 
   // Catches history
   updateModalCatches(w.id);
