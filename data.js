@@ -266,7 +266,7 @@ function haversineKm(a, b) {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
 }
 
-const WRECKS = RAW.map(([id, name, latRaw, lngRaw, cat, year, depth, dynamo, note]) => {
+const WRECKS = RAW.filter(r => r[4] !== 'autre').map(([id, name, latRaw, lngRaw, cat, year, depth, dynamo, note]) => {
   const lat = ddm(latRaw), lng = ddm(lngRaw);
   const d = { lat, lng };
   const km = haversineKm(DK_PORT, d);

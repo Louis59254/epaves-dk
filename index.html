@@ -287,6 +287,9 @@
     .fish-info{min-width:0}
     .fish-name{font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .fish-best{font-size:10px;color:var(--text2);margin-top:2px;font-weight:500}
+    .fish-wiki-hint{font-size:10px;color:var(--sea);margin-top:3px;font-weight:600}
+    .fish-card[onclick]{transition:transform .15s,box-shadow .15s}
+    .fish-card[onclick]:hover{transform:scale(1.03);box-shadow:0 4px 16px rgba(28,0,254,.18)}
 
     /* Technique cards */
     .tech-cards{display:flex;flex-direction:column;gap:6px;padding:0 16px}
@@ -354,13 +357,132 @@
     .dslot-dot.good{background:#10b981}
     .dslot-dot.ok{background:#f59e0b}
     .dslot-dot.bad{background:#f43f5e}
-    /* Tide by day */
-    .tide-day-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:capitalize;margin:10px 2px 5px}
+    /* Tide date strip */
+    .tide-date-strip{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}
+    .tide-date-strip::-webkit-scrollbar{display:none}
+    .tide-chip{background:var(--surf);border-radius:14px;padding:10px 8px;text-align:center;flex-shrink:0;cursor:pointer;box-shadow:var(--sh);transition:all .15s;min-width:54px}
+    .tide-chip:active{transform:scale(.94)}
+    .tide-chip.active{background:var(--sea);box-shadow:0 4px 16px rgba(28,0,254,.3)}
+    .tide-chip-day{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.3px}
+    .tide-chip.active .tide-chip-day{color:rgba(255,255,255,.7)}
+    .tide-chip-num{font-size:22px;font-weight:900;color:var(--text);line-height:1.1;margin:3px 0}
+    .tide-chip.active .tide-chip-num,.tide-chip.active .tide-chip-month{color:#fff}
+    .tide-chip-month{font-size:10px;color:var(--text2);font-weight:600}
+    /* Tide chart */
+    .tide-chart-wrap{background:var(--surf);border-radius:var(--r);padding:12px 10px 6px;box-shadow:var(--sh);margin-bottom:8px}
+    .tide-chart-title{font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px}
     /* Loading/error */
     .met-loading{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
     /* Empty */
     .empty{text-align:center;padding:60px 24px;color:var(--muted)}
     .empty-ico{font-size:48px;margin-bottom:12px;opacity:.5}
+
+    /* ── CARTE VIEW TOGGLE ──────────────────────────────────────── */
+    .carte-header{background:var(--surf);border-bottom:1px solid rgba(28,0,254,.07);padding:6px 10px;flex-shrink:0;display:flex;align-items:center;gap:8px}
+    .carte-seg{display:flex;background:var(--surf2);border-radius:10px;padding:3px;flex:1;border:1.5px solid var(--surf3);gap:0}
+    .seg-btn{flex:1;padding:7px 8px;border:none;background:transparent;border-radius:7px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px}
+    .seg-btn svg{width:13px;height:13px;flex-shrink:0}
+    .seg-btn.on{background:var(--surf);color:var(--sea);box-shadow:0 1px 5px rgba(28,0,254,.14)}
+    #carte-map-view{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column}
+    #carte-list-view{flex:1;overflow:hidden;display:none;flex-direction:column}
+    #carte-list-view.on{display:flex}
+
+    /* ── INFO WIKI ──────────────────────────────────────────────── */
+    .info-scroll{flex:1;overflow-y:auto;background:var(--bg);-webkit-overflow-scrolling:touch}
+    .info-scroll::-webkit-scrollbar{display:none}
+    .wiki-home,.wiki-section-wrap,.fish-detail-wrap{padding:12px}
+    .wiki-title{font-size:20px;font-weight:900;color:var(--text);margin-bottom:3px}
+    .wiki-subtitle{font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.5}
+    .wiki-cats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}
+    .wiki-cat{background:var(--surf);border-radius:var(--r);padding:16px 14px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;cursor:pointer;box-shadow:var(--sh);transition:all .15s;border:1.5px solid transparent}
+    .wiki-cat:active{transform:scale(.96);border-color:var(--sea)}
+    .wiki-cat-ico{font-size:28px;line-height:1}
+    .wiki-cat-name{font-size:13px;font-weight:800;color:var(--text)}
+    .wiki-cat-sub{font-size:11px;color:var(--muted);font-weight:500}
+    /* Section header */
+    .wiki-section-hd{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+    .wiki-back{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:6px 13px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .15s}
+    .wiki-back:active{background:var(--surf3)}
+    .wiki-section-title{font-size:17px;font-weight:900;color:var(--text);flex:1}
+    /* Fish grid */
+    .fish-wiki-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .fish-wiki-card{background:var(--surf);border-radius:var(--r);padding:12px 11px 10px;cursor:pointer;box-shadow:var(--sh);transition:all .15s;border:1.5px solid transparent}
+    .fish-wiki-card:active{transform:scale(.96);border-color:var(--sea)}
+    .fish-wiki-emo{font-size:32px;line-height:1;margin-bottom:5px}
+    .fish-wiki-name{font-size:12px;font-weight:800;color:var(--text)}
+    .fish-wiki-nick{font-size:10px;color:var(--sea);font-weight:700}
+    .fish-wiki-size{font-size:10px;color:var(--text2);margin-top:2px}
+    .fish-season-dots{display:flex;gap:2px;margin-top:6px}
+    .sdot{width:6px;height:6px;border-radius:50%;background:var(--surf3)}
+    .sdot.on{background:var(--green)}
+    /* Fish detail */
+    .fish-detail-hero{background:var(--surf);border-radius:var(--r);padding:15px;margin-bottom:10px;box-shadow:var(--sh);display:flex;align-items:flex-start;gap:13px}
+    .fish-detail-emo{font-size:50px;line-height:1;flex-shrink:0}
+    .fish-detail-info{flex:1}
+    .fish-detail-name{font-size:19px;font-weight:900;color:var(--text);line-height:1.2}
+    .fish-detail-nick{font-size:12px;color:var(--sea);font-weight:700;margin-top:2px}
+    .fish-detail-latin{font-size:11px;color:var(--muted);font-style:italic}
+    .wiki-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+    .wiki-box{background:var(--surf);border-radius:var(--r);padding:12px 12px;box-shadow:var(--sh)}
+    .wiki-box-l{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px}
+    .wiki-box-v{font-size:14px;font-weight:800;color:var(--text);line-height:1.3}
+    .wiki-box-v.warn{color:var(--gold)}
+    .wiki-box-v.alert{color:var(--red)}
+    .wiki-box-v.good{color:var(--green)}
+    .wiki-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin:14px 0 6px}
+    .wiki-text{background:var(--surf);border-radius:var(--r);padding:13px 13px;box-shadow:var(--sh);margin-bottom:8px}
+    .wiki-text p{font-size:13px;line-height:1.65;color:var(--text2)}
+    .wiki-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+    .wchip{padding:5px 11px;border-radius:20px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+    .wchip.blue{background:var(--sea-bg);color:var(--sea)}
+    .wchip.green{background:rgba(5,150,105,.1);color:var(--green)}
+    .wchip.orange{background:rgba(245,158,11,.12);color:#b45309}
+    .wchip.red{background:rgba(244,63,94,.10);color:var(--red)}
+    .wiki-alert{background:rgba(244,63,94,.07);border:1.5px solid rgba(244,63,94,.2);border-radius:var(--r);padding:10px 13px;margin-bottom:8px;font-size:12px;color:#be123c;font-weight:600;line-height:1.5}
+    /* Techniques */
+    .tech-wiki-list{display:flex;flex-direction:column;gap:8px}
+    .tech-wiki-card{background:var(--surf);border-radius:var(--r);padding:13px 14px;cursor:pointer;box-shadow:var(--sh);display:flex;align-items:center;gap:12px;transition:all .15s}
+    .tech-wiki-card:active{transform:scale(.98)}
+    .tech-wiki-ico{font-size:26px;width:38px;text-align:center;flex-shrink:0}
+    .tech-wiki-info{flex:1;min-width:0}
+    .tech-wiki-name{font-size:14px;font-weight:800;color:var(--text)}
+    .tech-wiki-brief{font-size:11px;color:var(--text2);margin-top:2px}
+    .tech-wiki-lvl{font-size:10px;color:var(--sea);font-weight:700;margin-top:3px}
+    /* Tech detail */
+    .tech-detail-hero{background:linear-gradient(135deg,var(--sea) 0%,var(--sea-md) 100%);border-radius:var(--r);padding:18px;margin-bottom:10px;color:#fff}
+    .tech-detail-emo{font-size:40px;line-height:1;margin-bottom:8px}
+    .tech-detail-name{font-size:20px;font-weight:900}
+    .tech-detail-brief{font-size:13px;opacity:.85;margin-top:4px}
+    .tech-detail-lvl{font-size:11px;font-weight:700;background:rgba(255,255,255,.2);border-radius:20px;display:inline-block;padding:3px 11px;margin-top:8px}
+    .materiel-box{background:var(--surf);border-radius:var(--r);padding:13px;box-shadow:var(--sh);margin-bottom:8px}
+    .materiel-row{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid rgba(28,0,254,.06);align-items:flex-start}
+    .materiel-row:last-child{border:none;padding-bottom:0}
+    .materiel-key{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;width:55px;flex-shrink:0;padding-top:1px}
+    .materiel-val{font-size:12px;color:var(--text);line-height:1.5}
+    .astuce-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+    .astuce-item{background:var(--surf);border-radius:10px;padding:10px 13px;box-shadow:var(--sh);font-size:12px;color:var(--text2);line-height:1.5;border-left:3px solid var(--sea)}
+    /* Réglementation */
+    .reg-table{background:var(--surf);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}
+    .reg-hd{display:flex;background:var(--sea);padding:8px 12px;gap:4px}
+    .reg-hd span{font-size:10px;font-weight:700;color:rgba(255,255,255,.9);text-transform:uppercase;letter-spacing:.4px}
+    .reg-row{display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid rgba(28,0,254,.06);gap:4px}
+    .reg-row:last-child{border:none}
+    .reg-sp{flex:2;font-size:12px;font-weight:700;color:var(--text)}
+    .reg-sz{flex:1;font-size:12px;font-weight:800;color:var(--sea);text-align:center}
+    .reg-qt{flex:2;font-size:11px;color:var(--text2);text-align:right;font-weight:600;line-height:1.4}
+    .reg-qt.alert{color:var(--red);font-weight:700}
+    /* Conseils */
+    .conseil-card{background:var(--surf);border-radius:var(--r);padding:13px 14px;margin-bottom:8px;box-shadow:var(--sh);display:flex;gap:12px;align-items:flex-start}
+    .conseil-ico{font-size:26px;flex-shrink:0;width:36px;text-align:center}
+    .conseil-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:4px}
+    .conseil-text{font-size:12px;line-height:1.6;color:var(--text2)}
+    .saison-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+    .saison-card{background:var(--surf);border-radius:var(--r);padding:13px;box-shadow:var(--sh)}
+    .saison-ico{font-size:24px;margin-bottom:5px}
+    .saison-label{font-size:11px;font-weight:800;color:var(--text);margin-bottom:4px}
+    .saison-tip{font-size:11px;color:var(--text2);line-height:1.55}
+    .securite-list{display:flex;flex-direction:column;gap:6px}
+    .securite-item{background:var(--surf);border-radius:10px;padding:10px 13px;font-size:12px;color:var(--text2);box-shadow:var(--sh);line-height:1.4}
   </style>
 </head>
 <body>
@@ -374,7 +496,7 @@
       </div>
     </div>
     <div class="h-stats">
-      <div class="stat-pill"><b id="h-count">245</b>&nbsp;épaves</div>
+      <div class="stat-pill"><b id="h-count">—</b>&nbsp;épaves</div>
     </div>
     <button class="gps-btn" id="gps-btn" onclick="toggleGPS()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -386,72 +508,100 @@
 
   <div id="panels">
 
-    <!-- MAP -->
-    <div class="panel on" id="p-map">
-      <div class="map-ov" id="msearch-wrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        <input id="msearch" type="search" placeholder="Chercher une épave…" oninput="mapSearch()">
-        <div id="mbadge">245</div>
-      </div>
-      <div id="leaflet-map"></div>
-
-      <div class="map-ov" id="map-filters">
-        <h4>Type de navire</h4>
-        <div class="fchips" id="cat-chips"></div>
-        <h4 style="margin-top:10px">Distance depuis Dunkerque</h4>
-        <div class="fchips" id="dist-chips">
-          <span class="chip on" data-d="999" onclick="setDistF(this)">Toutes</span>
-          <span class="chip" data-d="5"   onclick="setDistF(this)">≤ 5 nm</span>
-          <span class="chip" data-d="10"  onclick="setDistF(this)">≤ 10 nm</span>
-          <span class="chip" data-d="20"  onclick="setDistF(this)">≤ 20 nm</span>
+    <!-- CARTE (map + liste fusionnés) -->
+    <div class="panel on" id="p-carte">
+      <!-- Toggle map/liste -->
+      <div class="carte-header">
+        <div class="carte-seg">
+          <button class="seg-btn on" id="ctog-map" onclick="setCarteView('map')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+              <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
+            </svg>
+            Carte
+          </button>
+          <button class="seg-btn" id="ctog-list" onclick="setCarteView('list')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            Liste épaves
+          </button>
         </div>
       </div>
 
-      <button class="fab" id="fab-filter" onclick="toggleMapF()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/>
-          <line x1="11" y1="18" x2="13" y2="18"/>
-        </svg>
-      </button>
-      <button class="fab" id="fab-me" onclick="centerMe()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- LIST -->
-    <div class="panel" id="p-list">
-      <div class="list-top">
-        <div class="srow">
-          <div class="swrap">
-            <svg class="sico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input class="sinput" id="lsearch" type="search" placeholder="Nom, type d'épave…" oninput="renderList()">
+      <!-- Vue CARTE -->
+      <div id="carte-map-view">
+        <div class="map-ov" id="msearch-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input id="msearch" type="search" placeholder="Chercher une épave…" oninput="mapSearch()">
+          <div id="mbadge">—</div>
+        </div>
+        <div id="leaflet-map"></div>
+        <div class="map-ov" id="map-filters">
+          <h4>Type de navire</h4>
+          <div class="fchips" id="cat-chips"></div>
+          <h4 style="margin-top:10px">Distance depuis Dunkerque</h4>
+          <div class="fchips" id="dist-chips">
+            <span class="chip on" data-d="999" onclick="setDistF(this)">Toutes</span>
+            <span class="chip" data-d="5"   onclick="setDistF(this)">≤ 5 nm</span>
+            <span class="chip" data-d="10"  onclick="setDistF(this)">≤ 10 nm</span>
+            <span class="chip" data-d="20"  onclick="setDistF(this)">≤ 20 nm</span>
           </div>
         </div>
-        <div class="sortrow">
-          <span>Trier :</span>
-          <button class="sbtn on" data-s="name"  onclick="setSort(this)">A → Z</button>
-          <button class="sbtn"    data-s="depth" onclick="setSort(this)">Profondeur</button>
-          <button class="sbtn"    data-s="port"  onclick="setSort(this)">Distance port</button>
-          <button class="sbtn"    data-s="dist"  id="sort-gps" style="display:none" onclick="setSort(this)">Ma position</button>
+        <button class="fab" id="fab-filter" onclick="toggleMapF()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/>
+            <line x1="11" y1="18" x2="13" y2="18"/>
+          </svg>
+        </button>
+        <button class="fab" id="fab-me" onclick="centerMe()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Vue LISTE -->
+      <div id="carte-list-view">
+        <div class="list-top">
+          <div class="srow">
+            <div class="swrap">
+              <svg class="sico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+              <input class="sinput" id="lsearch" type="search" placeholder="Nom, type d'épave…" oninput="renderList()">
+            </div>
+          </div>
+          <div class="sortrow">
+            <span>Trier :</span>
+            <button class="sbtn on" data-s="name"  onclick="setSort(this)">A → Z</button>
+            <button class="sbtn"    data-s="depth" onclick="setSort(this)">Profondeur</button>
+            <button class="sbtn"    data-s="port"  onclick="setSort(this)">Distance port</button>
+            <button class="sbtn"    data-s="dist"  id="sort-gps" style="display:none" onclick="setSort(this)">Ma position</button>
+          </div>
         </div>
+        <div class="qfrow" id="qfrow">
+          <span class="qf on" data-q="all"     onclick="setQF(this)">Toutes (245)</span>
+          <span class="qf"    data-q="lowtide" onclick="setQF(this)">🏖 Marée basse</span>
+          <span class="qf"    data-q="dynamo"  onclick="setQF(this)">⚔️ Op. Dynamo</span>
+          <span class="qf"    data-q="shallow" onclick="setQF(this)">≤ 15 m</span>
+          <span class="qf"    data-q="deep"    onclick="setQF(this)">≥ 30 m</span>
+          <span class="qf"    data-q="near"    onclick="setQF(this)">≤ 10 nm port</span>
+          <span class="qf"    data-q="chalk"   onclick="setQF(this)">🎣 Chalutiers</span>
+          <span class="qf"    data-q="sub"     onclick="setQF(this)">🔭 Sous-marins</span>
+        </div>
+        <div id="wlist"></div>
       </div>
-      <div class="qfrow" id="qfrow">
-        <span class="qf on" data-q="all"     onclick="setQF(this)">Toutes (245)</span>
-        <span class="qf"    data-q="lowtide" onclick="setQF(this)">🏖 Marée basse</span>
-        <span class="qf"    data-q="dynamo"  onclick="setQF(this)">⚔️ Op. Dynamo</span>
-        <span class="qf"    data-q="shallow" onclick="setQF(this)">≤ 15 m</span>
-        <span class="qf"    data-q="deep"    onclick="setQF(this)">≥ 30 m</span>
-        <span class="qf"    data-q="near"    onclick="setQF(this)">≤ 10 nm port</span>
-        <span class="qf"    data-q="chalk"   onclick="setQF(this)">🎣 Chalutiers</span>
-        <span class="qf"    data-q="sub"     onclick="setQF(this)">🔭 Sous-marins</span>
+    </div>
+
+    <!-- INFO (wiki pêche) -->
+    <div class="panel" id="p-info">
+      <div class="info-scroll" id="info-scroll">
+        <div class="met-loading">⏳ Chargement…</div>
       </div>
-      <div id="wlist"></div>
     </div>
 
     <!-- SPOTS -->
@@ -494,7 +644,7 @@
   </div>
 
   <nav>
-    <button class="tab-btn on" id="nt-map" onclick="showP('map')">
+    <button class="tab-btn on" id="nt-carte" onclick="showP('carte')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
         <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
@@ -502,12 +652,12 @@
       Carte
       <div class="tab-dot"></div>
     </button>
-    <button class="tab-btn" id="nt-list" onclick="showP('list')">
+    <button class="tab-btn" id="nt-info" onclick="showP('info')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-        <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        <line x1="12" y1="7" x2="12" y2="7.01"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/>
       </svg>
-      Épaves
+      Info
       <div class="tab-dot"></div>
     </button>
     <button class="tab-btn" id="nt-spots" onclick="showP('spots')">
@@ -662,7 +812,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<script src="data.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="data.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

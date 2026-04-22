@@ -16,6 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
   renderSpots();
   renderPeches();
   document.getElementById('sf-date').value = new Date().toISOString().split('T')[0];
+  // Update dynamic counts
+  document.querySelector('[data-q="all"]').textContent = `Toutes (${WRECKS.length})`;
+  document.getElementById('mbadge').textContent = WRECKS.length;
+  document.getElementById('h-count').textContent = WRECKS.length;
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 });
 
@@ -189,16 +193,29 @@ function fmtKm(km) {
 }
 
 // ── Panels ───────────────────────────────────────────────────────────────────
+let carteView = 'map';
+
 function showP(id) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('on'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('on'));
   document.getElementById('p-' + id).classList.add('on');
   document.getElementById('nt-' + id).classList.add('on');
-  if (id === 'map') setTimeout(() => map.invalidateSize(), 60);
+  if (id === 'carte' && carteView === 'map') setTimeout(() => map.invalidateSize(), 60);
   if (id === 'spots') renderSpots();
   if (id === 'peches') renderPeches();
   if (id === 'meteo') loadMeteo();
+  if (id === 'info') renderInfo();
   document.getElementById('map-filters').classList.remove('open');
+}
+
+function setCarteView(v) {
+  carteView = v;
+  document.getElementById('carte-map-view').style.display  = v === 'map'  ? 'flex' : 'none';
+  document.getElementById('carte-list-view').classList.toggle('on', v === 'list');
+  document.getElementById('ctog-map').classList.toggle('on',  v === 'map');
+  document.getElementById('ctog-list').classList.toggle('on', v === 'list');
+  if (v === 'map') { setTimeout(() => map.invalidateSize(), 60); }
+  if (v === 'list') { renderList(); }
 }
 
 // ── List ─────────────────────────────────────────────────────────────────────
@@ -314,20 +331,28 @@ function openModal(id) {
   if (w.note) { document.getElementById('m-note').textContent = w.note; nw.style.display = ''; }
   else nw.style.display = 'none';
 
-  // Espèces — cartes enrichies avec emoji + meilleure saison
+  // Espèces — cartes enrichies avec emoji + meilleure saison + lien wiki
+  const SPECIES_NAME_MAP = {
+    'Bar':'bar','Lieu':'lieu','Cabillaud':'cabillaud','Merlan':'merlan','Sole':'sole',
+    'Plie':'plie','Grondin':'grondin','Seiche':'seiche','Raie':'raie','Dorade':'dorade',
+    'Congre':'congre','Turbot':'turbot','Flet':'flet','Maquereau':'maquereau'
+  };
   document.getElementById('m-sp').innerHTML = '<div class="fish-grid">' +
     (w.species.length ? w.species.map(s => {
-      // species stockées comme "Bar 🐟" — extraire nom et emoji
       const dbKey = Object.keys(FISH_DB).find(k => s.includes(k)) || '';
       const f = FISH_DB[dbKey] || { emoji: '🐟', best: '' };
       const parts = s.split(' ');
       const emo = parts.length > 1 ? parts[parts.length - 1] : f.emoji;
       const name = dbKey || s;
-      return `<div class="fish-card">
+      const wikiId = SPECIES_NAME_MAP[name] || WIKI_SPECIES.find(x => s.toLowerCase().includes(x.id))?.id || '';
+      const wikiAttr = wikiId ? `onclick="document.getElementById('epave-modal').style.display='none';showP('info');wikiNav('species-d','${wikiId}')" style="cursor:pointer"` : '';
+      const wikiHint = wikiId ? `<div class="fish-wiki-hint">📖 Voir la fiche</div>` : '';
+      return `<div class="fish-card" ${wikiAttr}>
         <span class="fish-emo">${emo}</span>
         <div class="fish-info">
           <div class="fish-name">${name}</div>
           ${f.best ? `<div class="fish-best">📅 ${f.best}</div>` : ''}
+          ${wikiHint}
         </div>
       </div>`;
     }).join('') : '<p style="color:var(--muted);font-size:13px;padding:4px 8px">Données espèces non disponibles</p>') +
@@ -352,7 +377,7 @@ function openModal(id) {
 
   document.getElementById('mbg').classList.add('open');
 
-  if (document.getElementById('p-map').classList.contains('on')) {
+  if (document.getElementById('p-carte').classList.contains('on')) {
     map.flyTo([w.lat, w.lng], 13, { duration: 1 });
   }
 }
@@ -699,6 +724,316 @@ function delSession(id) {
   toast('Session supprimée');
 }
 
+// ── WIKI DATA ─────────────────────────────────────────────────────────────────
+const WIKI_SPECIES = [
+  { id:'bar', name:'Bar européen', nick:'Loup de mer', emoji:'🐟', latin:'Dicentrarchus labrax', taille:42, quota:'3/jour (avr–déc)', quotaAlert:true, saisons:[0,0,0,1,1,1,1,1,1,1,0,0], meilleures:'Sept–Oct', marees:'Montante · Descendante', profondeur:'5–30m (épaves, digues)', techniques:['Spinning leurres souples','Popper surface','Jigging vertical','Pêche à la posée'], leurres:['Shad 12–18cm (lançon)','Slug 15cm','Popper','Stickbait'], appats:['Arénicole','Sandeel vivant','Calamar'], desc:"Le bar commun est LE poisson phare de Dunkerque. Prédateur actif, il fréquente les épaves, les digues et les passes à fort courant. Particulièrement actif en période de migration automnale, il chasse en meute dans les courants.", conseils:"Pêcher à l'étale de basse mer sur les épaves peu profondes. Les imitations de lançon (sandeel) sont très efficaces en Manche. Sortir 1h avant la pleine mer montante pour les meilleures captures depuis les digues.", regie:"⚠️ Quota 3 bar/jour d'avril à décembre. NO-KILL OBLIGATOIRE du 1er février au 31 mars.", color:'#1c00fe' },
+  { id:'maquereau', name:'Maquereau', emoji:'🐡', latin:'Scomber scombrus', taille:20, quota:'20/jour', saisons:[0,0,0,1,1,1,1,1,0,0,0,0], meilleures:'Mai–Août', marees:'Toutes marées', profondeur:'0–30m (pélagique)', techniques:['Ligne à plumes','Sabiki','Spinning ultra-léger','Traine légère'], leurres:['Plumes 6 hameçons (rouge/blanc)','Sabiki','Leurre 3–5cm'], appats:['Morceaux de poisson','Calamar'], desc:"Le maquereau arrive dans les eaux dunkerquoises en mai-juin et repart en septembre. Poisson de bancs, visible en surface quand il chasse. Excellent appât vivant pour le bar.", conseils:"En bancs en surface, utiliser les plumes en lancer-ramener rapide. Le matin et le soir sont les meilleurs moments. Les bancs sont souvent signalés par des oiseaux en surface.", regie:'Taille min : 20cm. Quota : 20/jour.', color:'#059669' },
+  { id:'lieu', name:'Lieu jaune', emoji:'🟡', latin:'Pollachius pollachius', taille:30, quota:'2/jour · Fermé janv–avr', quotaAlert:true, saisons:[0,0,0,0,1,1,1,1,1,1,1,0], meilleures:'Oct–Nov', marees:'Descendante · Étale BM', profondeur:'15–50m (épaves)', techniques:['Jigging vertical','Ascenseur au leurre souple','Traine lente','Verticale jig'], leurres:['Shad 15–20cm (blanc/naturel)','Slug 20cm','Jig 60–150g','Black Minnow 200'], appats:['Calamar','Sandeel'], desc:"Le lieu jaune est le poisson roi des épaves dunkerquoises. Il stationne en bancs denses autour des structures. Les grands lieux (70–90cm) descendent des fonds atlantiques en hiver.", conseils:"Méthode ascenseur : descendre jusqu'au fond, remonter en moulinant régulièrement. Tresse multicolore (10m/couleur) indispensable. Pêcher 2–5m AU-DESSUS de l'épave.", regie:"⚠️ Pêche FERMÉE du 1er janvier au 30 avril. Quota : 2 lieux/jour du 1er mai au 31 déc. Taille : 30cm.", color:'#f59e0b' },
+  { id:'cabillaud', name:'Cabillaud', nick:'Morue', emoji:'🎣', latin:'Gadus morhua', taille:35, quota:'20/jour', saisons:[1,1,0,0,0,0,0,0,0,1,1,1], meilleures:'Nov–Fév', marees:'Montante · Faibles coeff', profondeur:'15–60m (fonds sableux, épaves)', techniques:['Surfcasting','Pêche au fond','Jigging lourd'], leurres:['Jig 80–200g','Leurre souple 20cm'], appats:['Grosse arénicole','Calamar','Couteau','Hareng'], desc:"La morue fréquente les eaux de la Manche en automne-hiver. Poisson de fond, il recherche les épaves et les enrochements. Les jetées dunkerquoises offrent de bonnes captures en décembre.", conseils:"Faibles coefficients souvent meilleurs (le courant réduit maintient l'appât en place). Pêcher la nuit depuis les jetées en décembre avec grosse arénicole.", regie:'Taille min : 35cm. Quota : 20/jour.', color:'#6360a0' },
+  { id:'merlan', name:'Merlan', emoji:'🐠', latin:'Merlangius merlangus', taille:23, quota:'20/jour', saisons:[1,1,0,0,0,0,0,0,0,0,1,1], meilleures:'Déc–Fév', marees:'Montante', profondeur:'10–40m (fonds sableux)', techniques:['Surfcasting nocturne','Pêche au fond','Palangrotte'], leurres:[], appats:['Arénicole','Crevette','Calamar','Ver de vase'], desc:"Poisson hivernal par excellence à Dunkerque, le merlan arrive en bancs en novembre-décembre. Sa chair délicate est très appréciée en cuisine. Se prend facilement depuis les jetées ou les plages.", conseils:"Pêche nocturne depuis les jetées très productive en décembre. La petite arénicole est l'appât idéal. Les plages de Malo-les-Bains offrent une bonne pêche au surfcasting.", regie:'Taille : 23cm. Quota : 20/jour.', color:'#64748b' },
+  { id:'sole', name:'Sole', emoji:'🫓', latin:'Solea solea', taille:24, quota:'10/jour', saisons:[0,0,0,1,1,1,1,1,0,0,0,0], meilleures:'Avr–Jul', marees:'Nuit · Montante douce', profondeur:'0–10m (fonds sableux)', techniques:['Surfcasting nocturne','Pêche à la posée'], leurres:[], appats:['Arénicole vive','Crevette grise','Ver de vase'], desc:"La sole est le poisson gastronomique des plages dunkerquoises. Timide et nocturne, elle se pêche surtout la nuit sur sable lors des températures douces au printemps.", conseils:"Pêche strictement nocturne de 22h à 3h. Petits hameçons (n°2–4) avec arénicole vive. Ne pas déplacer le montage trop souvent. Plages de Malo et Bray-Dunes très productives.", regie:'Taille : 24cm. Quota : 10/jour.', color:'#d97706' },
+  { id:'plie', name:'Plie', nick:'Carrelet', emoji:'🪸', latin:'Pleuronectes platessa', taille:27, quota:'20/jour', saisons:[0,0,1,1,1,1,1,1,0,0,0,0], meilleures:'Mar–Jun', marees:'Montante · Coeff ≥60', profondeur:'0–40m (fonds sableux)', techniques:['Surfcasting','Pêche au fond','Pêche à la posée'], leurres:['Jig léger avec appât'], appats:['Couteau','Crevette grise','Crabe mou','Arénicole'], desc:"La plie est très présente dans les eaux dunkerquoises au printemps. Poisson plat de fond, elle se nourrit de crustacés et de vers sur les bancs sableux.", conseils:"Pêcher sur fonds sableux plats avec couteaux ou arénicoles. Les grandes marées de printemps sont idéales. Les bancs de Flandre (3–15m) sont riches en plies.", regie:'Taille : 27cm. Quota : 20/jour.', color:'#92400e' },
+  { id:'grondin', name:'Grondin rouge', emoji:'🦞', latin:'Chelidonichthys cuculus', taille:20, quota:'Pas de quota', saisons:[0,0,0,0,1,1,1,1,1,1,0,0], meilleures:'Jun–Sep', marees:'Descendante', profondeur:'20–60m (fonds sableux, épaves)', techniques:['Jigging léger','Pêche au fond'], leurres:['Petit shad 8–12cm','Jig 40–80g'], appats:['Calamar','Crevette','Poisson mort manoeuvré'], desc:"Caractéristique des épaves de la Manche, le grondin rouge émet un bruit lorsqu'on le sort de l'eau. Prise fréquente et annexe lors de la pêche du lieu jaune.", conseils:"Commun sur les épaves dunkerquoises en été. Sa chair rosée est excellente mais sous-estimée. Se tient au fond, pêcher avec un jig ou leurre souple.", regie:'Taille : 20cm. Aucun quota officiel.', color:'#dc2626' },
+  { id:'seiche', name:'Seiche', emoji:'🦑', latin:'Sepia officinalis', taille:13, quota:'20/jour', saisons:[0,0,1,1,1,1,0,0,0,0,0,0], meilleures:'Mar–Mai', marees:'Montante · Coeff 60-90', profondeur:'5–30m (épaves, herbiers)', techniques:['Turlutte (EGI)','Pêche au vif','Traine lente'], leurres:['Turlutte EGI 2.5–3.5 (naturel/crevette)'], appats:['Crevette vivante','Calamar'], desc:"La seiche arrive sur les côtes dunkerquoises au printemps pour se reproduire sur les épaves peu profondes. Sa pêche à la turlutte est très ludique et la chair est excellente.", conseils:"Animation darting : lancer la turlutte, laisser couler au fond, tirer brusquement vers le haut, pause. Les seiches attaquent souvent à la descente. La nuit avec turlutte lumineuse est très productive.", regie:'Taille manteau : 13cm. Quota : 20/jour.', color:'#7c3aed' },
+  { id:'raie', name:'Raie bouclée', emoji:'🦈', latin:'Raja clavata', taille:45, quota:'5/jour', saisons:[0,0,0,0,0,1,1,1,1,0,0,0], meilleures:'Jun–Sep', marees:'Étale · Faibles courants', profondeur:'10–50m (fonds sableux)', techniques:['Pêche au fond','Surfcasting lourd'], leurres:[], appats:['Hareng','Maquereau coupé','Calamar','Crevette'], desc:"La raie bouclée est la plus commune dans les eaux dunkerquoises. Elle chasse sur les fonds sableux lors des étales de marée. La joue de raie est un mets délicat.", conseils:"Pêcher à l'étale de BM ou PM. Gros montages avec appâts odorants. Elle résiste avec ses ailes au ferrage. Changer l'appât régulièrement (crabes voleurs).", regie:'Taille : 45cm. Quota : 5/jour. Relâcher les espèces non identifiées.', color:'#065f46' },
+  { id:'dorade', name:'Dorade grise', emoji:'⭕', latin:'Spondyliosoma cantharus', taille:23, quota:'20/jour', saisons:[0,0,0,0,0,1,1,1,1,0,0,0], meilleures:'Jul–Sep', marees:'Montante · Nuit', profondeur:'5–30m (épaves, digues)', techniques:['Pêche aux appâts','Spinning léger','Drop shot'], leurres:['Shad 8–12cm','Vers artificiel'], appats:['Crabe mou','Moule','Crevette','Calamar'], desc:"La dorade grise est attirée par les eaux tièdes des rejets de la centrale de Gravelines en été. Elle fréquente aussi les épaves et digues.", conseils:"La zone de Gravelines est un hotspot en juillet-août. Pêcher la nuit de préférence. Les crabes mous sont l'appât le plus efficace. Peut se prendre en popper depuis les digues.", regie:'Taille : 23cm. Quota : 20/jour.', color:'#0ea5e9' },
+  { id:'congre', name:'Congre', emoji:'🐍', latin:'Conger conger', taille:58, quota:'5/jour', saisons:[0,0,0,0,1,1,1,1,1,1,0,0], meilleures:'Jun–Oct', marees:'Nuit · Étale', profondeur:'10–50m (épaves)', techniques:['Pêche au fond','Jigging lourd XXL'], leurres:['Jig 100–200g','Leurre souple XXL'], appats:['Maquereau entier','Calmar entier','Hareng'], desc:"Le congre vit dans les cavités des épaves. Il peut atteindre de très grandes tailles (>2m). Poisson de nuit, sa pêche nécessite du matériel costaud et du ferme au ferrage.", conseils:"Matériel renforcé : tresse PE 3–4, bas de ligne acier. Le congre se réfugie dans la structure au ferrage, ferrer et tenir ! Maquereau entier au fond la nuit sur les épaves profondes.", regie:'Taille : 58cm. Quota : 5/jour.', color:'#1a1a2e' },
+  { id:'turbot', name:'Turbot', emoji:'🪅', latin:'Scophthalmus maximus', taille:30, quota:'5/jour', saisons:[0,0,0,0,0,1,1,1,1,0,0,0], meilleures:'Jun–Août', marees:'Descendante · Étale', profondeur:'5–50m (fonds sableux)', techniques:['Traine lente','Pêche au vif','Jigging lent'], leurres:['Imitation lançon (sandeel)','Shad naturel'], appats:['Sandeel vivant','Calamar','Sprat'], desc:"Le turbot est le poisson gastronomique ultime, rare mais présent en été. Sa pêche est difficile mais la récompense est à la hauteur. Les fonds sableux entre les épaves sont ses zones de chasse.", conseils:"Traine lente (1–2 nœuds) sur fonds sableux avec sandeel naturel. Attaques discrètes. Prise accessoire rare mais recherchée lors des sorties bateau.", regie:'Taille : 30cm. Quota : 5/jour.', color:'#0f766e' },
+  { id:'flet', name:'Flet', emoji:'🫓', latin:'Platichthys flesus', taille:23, quota:'20/jour', saisons:[1,1,1,0,0,0,0,0,0,1,1,1], meilleures:'Oct–Mar', marees:'Montante · Forte marée', profondeur:'0–20m (estuaires, plages)', techniques:['Surfcasting','Pêche à la posée légère'], leurres:[], appats:['Arénicole','Crevette grise','Ver de vase'], desc:"Le flet est le poisson plat le plus commun des côtes dunkerquoises. Résistant, il supporte les eaux saumâtres et est présent toute l'année, surtout en automne-hiver.", conseils:"Facile à pêcher depuis les plages avec arénicole. Les fortes marées d'hiver le poussent sur les plages. Indicateur fiable de la présence de poissons.", regie:'Taille : 23cm. Quota : 20/jour.', color:'#64748b' },
+];
+
+const WIKI_TECHNIQUES = [
+  { id:'jigging', name:'Jigging vertical', emoji:'🎯', brief:'La méthode reine sur épaves', niveau:'Intermédiaire', cibles:['Lieu jaune','Bar','Cabillaud','Grondin','Congre'], canne:'Canne jigging 1,80–1,90m · 60–180g', moulinet:'4000–5000 · ratio ≥6:1', ligne:'Tresse PE 1.5–2 multicolore (10m/couleur) + fluoro 40cm', leurres:['Jig métal 60–180g','Leurre souple 15–20cm (tête 30–60g)','Black Minnow 200'], technique:"Laisser descendre jusqu'au fond en comptant les couleurs. Animation dandine (tirées vives + pauses) sur 2–3m, puis redescendre. Méthode ascenseur : descendre et remonter en moulinant sans animer.", astuces:["Pêcher 2–5m AU-DESSUS de l'épave (pas au fond)","Tresse multicolore : indispensable pour connaître la profondeur du leurre","Marée descendante + coeff 70–90 = conditions idéales","Varier les animations : dandine, linéaire, pause longue"], saison:'Toute l\'année · Meilleur oct–mars pour le lieu' },
+  { id:'spinning', name:'Spinning aux leurres', emoji:'🎪', brief:'Depuis les jetées et le bord', niveau:'Débutant à Avancé', cibles:['Bar','Maquereau','Lieu','Dorade'], canne:'Canne spinning 2,10–2,40m · 10–40g', moulinet:'3000–4000 · ratio ≥6:1', ligne:'Tresse PE 0.8–1.2 + fluoro 25–35cm', leurres:['Shad 10–15cm (sandeel, lançon)','Slug 12–15cm','Stickbait','Popper'], technique:"Lancer loin, laisser couler à la profondeur souhaitée, ramener en animant : tirées-pauses, linéaire, stop-and-go. Le bar attaque souvent à la pause ou à la descente du leurre.", astuces:["Imitations de lançon (sandeel) : les plus efficaces en Manche","Pêcher 1h après le lever du soleil ou en soirée","Montante douce (coeff 60–80) = idéal depuis les digues de Dunkerque","Couleurs naturelles par eau claire, flashy par eau chargée"], saison:'Printemps à automne (bar) · Été (maquereau)' },
+  { id:'surfcasting', name:'Surfcasting', emoji:'🎣', brief:'Depuis la plage avec appâts naturels', niveau:'Intermédiaire', cibles:['Sole','Plie','Flet','Cabillaud','Merlan','Bar'], canne:'Canne surf 3,60–4,50m · 100–200g', moulinet:'6000–8000 · 300m tresse min', ligne:'Nylon 30–35/100 ou tresse PE 2', leurres:['Bas de ligne 2–3 hameçons (n°1–4) + lest fuseau 80–200g'], technique:"Lancer loin (60–100m+) pour les zones profondes. Poser sur pied avec signal sonore. Attendre la touche franchement avant de ferrer. Changer l'appât à chaque lancer.", astuces:["Arénicole vive = appât universel · changer souvent (crabes voleurs)","Pêche nocturne très efficace pour la sole (22h–3h)","Forte marée descendante pour le bar depuis les plages","⚠️ Juillet-août : plages surveillées 10h–19h, pas de pêche !"], saison:'Toute l\'année · Meilleur automne-hiver et printemps' },
+  { id:'plumes', name:'Ligne à plumes', emoji:'🪶', brief:'Simple et efficace pour les bancs', niveau:'Débutant', cibles:['Maquereau','Bar (petits)','Merlan'], canne:'Canne spinning ou float 2m+', moulinet:'2500–4000', ligne:'Nylon 20–25/100 ou tresse légère', leurres:['Plumes 6 hameçons (rouge/blanc)','Sabiki','Lest 30–60g'], technique:"Lancer le montage loin, laisser couler 2–5m, ramener rapidement en vibrant la canne. En bateau : laisser le courant porter les plumes pendant la dérive.", astuces:["Le matin tôt et le soir = meilleurs moments","Chercher les bancs : oiseaux en surface, remous, flashes","Les maquereaux capturés = excellents appâts vivants pour le bar","En bateau sur dérive : très efficace sans effort"], saison:'Mai à Septembre' },
+  { id:'turlutte', name:'Pêche à la turlutte', emoji:'🦑', brief:'Seiches et calmars à la turlutte EGI', niveau:'Débutant à Intermédiaire', cibles:['Seiche','Calmar'], canne:'Canne Eging légère 2,10–2,30m', moulinet:'2500–3500', ligne:'Tresse PE 0.6–0.8 + fluoro 12–18/100', leurres:['Turlutte EGI 2.5–3.5 (imitation crevette)','Turlutte lestée pour les fonds'], technique:"Lancer, laisser couler au fond. Tirer brusquement vers le haut (darting) pour que la turlutte bondit, puis longue pause en laissant redescendre. La seiche attaque souvent à la descente.", astuces:["Couleurs naturelles (beige, pink) les plus efficaces","Turlutte UV la nuit = très productif","Mars–mai : seiches concentrées sur les épaves de ponte","La seiche change de couleur : signe d'attaque imminente !"], saison:'Mars à Juin' },
+  { id:'posee', name:'Pêche à la posée', emoji:'⚓', brief:'Technique polyvalente et accessible', niveau:'Débutant', cibles:['Plie','Sole','Flet','Grondin','Raie','Dorade'], canne:'Canne à posée 2,40–3m · 50–100g', moulinet:'4000–6000', ligne:'Tresse PE 1.5 + bas de ligne nylon 50cm', leurres:['1–2 hameçons n°2–1/0 + plomb torpille 50–100g'], technique:"Lancer et laisser reposer sur le fond. Tenir la ligne légèrement tendue. Ferrer à la touche franche. Idéal depuis le bateau à l'ancre sur les fonds plats ou les épaves.", astuces:["Appâts naturels frais = indispensable, changer régulièrement","Courant modéré ou faible pour garder l'appât en place","Technique idéale pour les débutants et les enfants","Bon pour combiner plusieurs espèces différentes"], saison:'Printemps à Automne' },
+];
+
+const WIKI_REGLEMENTATION = [
+  { sp:'Bar européen', emo:'🐟', sz:'42 cm', qt:'3/jour · No-kill fév–mars', alert:true },
+  { sp:'Maquereau', emo:'🐡', sz:'20 cm', qt:'20/jour' },
+  { sp:'Lieu jaune', emo:'🟡', sz:'30 cm', qt:'2/jour · Fermé jan–avr', alert:true },
+  { sp:'Cabillaud', emo:'🎣', sz:'35 cm', qt:'20/jour' },
+  { sp:'Merlan', emo:'🐠', sz:'23 cm', qt:'20/jour' },
+  { sp:'Sole', emo:'🫓', sz:'24 cm', qt:'10/jour' },
+  { sp:'Plie (Carrelet)', emo:'🪸', sz:'27 cm', qt:'20/jour' },
+  { sp:'Grondin rouge', emo:'🦞', sz:'20 cm', qt:'—' },
+  { sp:'Seiche', emo:'🦑', sz:'13 cm', qt:'20/jour' },
+  { sp:'Raie bouclée', emo:'🦈', sz:'45 cm', qt:'5/jour', alert:true },
+  { sp:'Dorade grise', emo:'⭕', sz:'23 cm', qt:'20/jour' },
+  { sp:'Congre', emo:'🐍', sz:'58 cm', qt:'5/jour' },
+  { sp:'Turbot', emo:'🪅', sz:'30 cm', qt:'5/jour' },
+  { sp:'Flet', emo:'🫓', sz:'23 cm', qt:'20/jour' },
+  { sp:'Anguille', emo:'〰️', sz:'—', qt:'⛔ Interdite', alert:true },
+];
+
+const WIKI_MAREES = [
+  { ico:'📈', title:'Grandes marées (Coeff ≥ 70)', text:"Les forts coefficients brassent les sédiments et activent les prédateurs. La marée montante pousse les poissons vers les hauts fonds. Préférer la 1ère heure de montante." },
+  { ico:'📉', title:'Petites marées (Coeff < 70)', text:"Pêche plus difficile depuis les plages. Concentrer les efforts sur les épaves, enrochements et digues. La nuit améliore souvent les résultats. Le spinning reste efficace." },
+  { ico:'⬆️', title:'Marée montante', text:"Idéale pour le bar et le lieu. Les poissons remontent sur les hauts fonds à la recherche de nourriture. Excellent pour le spinning depuis les digues." },
+  { ico:'⬇️', title:'Marée descendante', text:"Le lieu jaune préfère la descendante sur les épaves. Le courant entraîne les proies vers les prédateurs en embuscade derrière les structures." },
+  { ico:'➡️', title:'Étale (BM ou PM)', text:"Moment propice aux poissons de fond : raie, sole, turbot, seiche. Les poissons chassent activement pendant les quelques minutes de calme." },
+];
+
+const WIKI_SAISONS = [
+  { ico:'🌸', label:'Printemps (Mar–Mai)', tip:'Seiche et dorade arrivent. Bar très actif. Plie abondante sur les fonds sableux. Idéal pour découvrir la pêche.' },
+  { ico:'☀️', label:'Été (Jun–Aoû)', tip:'Maquereau, dorade (Gravelines), grondin, seiche. Plages surveillées 10h–19h. Sortir tôt le matin ou en soirée.' },
+  { ico:'🍂', label:'Automne (Sep–Nov)', tip:"LA saison du bar et du lieu jaune. Conditions souvent excellentes. Migrations actives. Meilleure période pour l'épave." },
+  { ico:'❄️', label:'Hiver (Déc–Fév)', tip:'Merlan et cabillaud depuis les jetées. Bar no-kill en fév. Sorties moins fréquentes mais belles prises pour qui ose.' },
+];
+
+const WIKI_SECURITE = [
+  '🚨 Toujours consulter Météo-France Marine avant de partir',
+  '📡 VHF canal 16 obligatoire en mer · Balise de détresse recommandée',
+  '🦺 Gilet de sauvetage porté en permanence à bord',
+  '📱 Informer un proche : zone, heure départ + retour prévue',
+  '⛽ Plein de carburant avec 50% de réserve minimum',
+  '🌊 Ne jamais pêcher depuis les digues par forte houle',
+  '🦟 Quota arénicole : 100 vers/jour/personne maximum',
+];
+
+// ── WIKI RENDERING ────────────────────────────────────────────────────────────
+let _wikiSection = 'home';
+let _wikiId = null;
+
+function renderInfo() {
+  _wikiSection = 'home';
+  _wikiId = null;
+  _drawInfo();
+}
+
+function _drawInfo() {
+  const el = document.getElementById('info-scroll');
+  if (!el) return;
+  if (_wikiSection === 'home')            el.innerHTML = _wikiHome();
+  else if (_wikiSection === 'species')    el.innerHTML = _wikiSpeciesList();
+  else if (_wikiSection === 'species-d')  el.innerHTML = _wikiSpeciesDetail(_wikiId);
+  else if (_wikiSection === 'techniques') el.innerHTML = _wikiTechList();
+  else if (_wikiSection === 'tech-d')     el.innerHTML = _wikiTechDetail(_wikiId);
+  else if (_wikiSection === 'regie')      el.innerHTML = _wikiRegie();
+  else if (_wikiSection === 'conseils')   el.innerHTML = _wikiConseils();
+  el.scrollTop = 0;
+}
+
+function wikiNav(section, id) {
+  _wikiSection = section;
+  _wikiId = id || null;
+  _drawInfo();
+}
+
+function _wikiHome() {
+  return `<div class="wiki-home">
+    <div class="wiki-title">📚 Wiki Pêche</div>
+    <div class="wiki-subtitle">Tout savoir pour pêcher à Dunkerque et en Manche — espèces, techniques, réglementation et conseils locaux</div>
+    <div class="wiki-cats">
+      <div class="wiki-cat" onclick="wikiNav('species')">
+        <div class="wiki-cat-ico">🐟</div>
+        <div class="wiki-cat-name">Espèces</div>
+        <div class="wiki-cat-sub">${WIKI_SPECIES.length} fiches détaillées</div>
+      </div>
+      <div class="wiki-cat" onclick="wikiNav('techniques')">
+        <div class="wiki-cat-ico">🎣</div>
+        <div class="wiki-cat-name">Techniques</div>
+        <div class="wiki-cat-sub">${WIKI_TECHNIQUES.length} méthodes expliquées</div>
+      </div>
+      <div class="wiki-cat" onclick="wikiNav('regie')">
+        <div class="wiki-cat-ico">📋</div>
+        <div class="wiki-cat-name">Réglementation</div>
+        <div class="wiki-cat-sub">Tailles & quotas 2026</div>
+      </div>
+      <div class="wiki-cat" onclick="wikiNav('conseils')">
+        <div class="wiki-cat-ico">🌊</div>
+        <div class="wiki-cat-name">Marées & Conseils</div>
+        <div class="wiki-cat-sub">Lire les marées, sécurité</div>
+      </div>
+    </div>
+    <div class="met-section">🌟 TOP ESPÈCES DU MOMENT</div>
+    <div class="fish-wiki-grid">
+      ${['bar','lieu','seiche','maquereau'].map(id => {
+        const s = WIKI_SPECIES.find(x => x.id === id);
+        return _fishMiniCard(s);
+      }).join('')}
+    </div>
+    <div class="met-section" style="margin-top:14px">⚠️ RAPPEL RÉGLEMENTATION</div>
+    <div class="wiki-alert">🐟 Bar : No-kill obligatoire fév–mars · 3 bars/jour max avr–déc · 42cm minimum<br>🟡 Lieu jaune : Pêche FERMÉE janv–avr · 2 lieux/jour max · 30cm minimum</div>
+  </div>`;
+}
+
+function _fishMiniCard(s) {
+  const dots = s.saisons.map((v,i) => `<div class="sdot ${v?'on':''}" title="${['J','F','M','A','M','J','J','A','S','O','N','D'][i]}"></div>`).join('');
+  return `<div class="fish-wiki-card" onclick="wikiNav('species-d','${s.id}')">
+    <div class="fish-wiki-emo">${s.emoji}</div>
+    <div class="fish-wiki-name">${s.name}</div>
+    ${s.nick ? `<div class="fish-wiki-nick">${s.nick}</div>` : ''}
+    <div class="fish-wiki-size">≥ ${s.taille} cm · ${s.quota}</div>
+    <div class="fish-season-dots">${dots}</div>
+  </div>`;
+}
+
+function _wikiSpeciesList() {
+  return `<div class="wiki-section-wrap">
+    <div class="wiki-section-hd">
+      <button class="wiki-back" onclick="wikiNav('home')">← Retour</button>
+      <div class="wiki-section-title">🐟 Espèces</div>
+    </div>
+    <div class="fish-wiki-grid">${WIKI_SPECIES.map(s => _fishMiniCard(s)).join('')}</div>
+  </div>`;
+}
+
+function _wikiSpeciesDetail(id) {
+  const s = WIKI_SPECIES.find(x => x.id === id);
+  if (!s) return _wikiSpeciesList();
+  const mnths = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  const saison = s.saisons.map((v,i) => v ? `<span class="wchip green">✓ ${mnths[i]}</span>` : '').filter(Boolean).join('');
+  const techChips = s.techniques.map(t => `<span class="wchip blue">🎣 ${t}</span>`).join('');
+  const leurreChips = s.leurres.map(l => `<span class="wchip orange">🪝 ${l}</span>`).join('');
+  const appatChips = s.appats.map(a => `<span class="wchip green">🪱 ${a}</span>`).join('');
+  return `<div class="fish-detail-wrap">
+    <div class="wiki-section-hd">
+      <button class="wiki-back" onclick="wikiNav('species')">← Espèces</button>
+    </div>
+    <div class="fish-detail-hero">
+      <div class="fish-detail-emo">${s.emoji}</div>
+      <div class="fish-detail-info">
+        <div class="fish-detail-name">${s.name}</div>
+        ${s.nick ? `<div class="fish-detail-nick">${s.nick}</div>` : ''}
+        <div class="fish-detail-latin">${s.latin}</div>
+      </div>
+    </div>
+    ${s.quotaAlert ? `<div class="wiki-alert">${s.regie}</div>` : ''}
+    <div class="wiki-grid-2">
+      <div class="wiki-box"><div class="wiki-box-l">Taille légale</div><div class="wiki-box-v good">≥ ${s.taille} cm</div></div>
+      <div class="wiki-box"><div class="wiki-box-l">Quota</div><div class="wiki-box-v ${s.quotaAlert?'alert':'warn'}">${s.quota}</div></div>
+      <div class="wiki-box"><div class="wiki-box-l">Meilleure saison</div><div class="wiki-box-v">${s.meilleures}</div></div>
+      <div class="wiki-box"><div class="wiki-box-l">Marées favorables</div><div class="wiki-box-v">${s.marees}</div></div>
+    </div>
+    <div class="wiki-box" style="margin-bottom:10px"><div class="wiki-box-l">Profondeur & habitat</div><div class="wiki-box-v" style="font-size:13px;margin-top:5px">${s.profondeur}</div></div>
+    <div class="wiki-lbl">📅 SAISONS</div>
+    <div class="wiki-chips">${saison}</div>
+    <div class="wiki-lbl">📖 DESCRIPTION</div>
+    <div class="wiki-text"><p>${s.desc}</p></div>
+    <div class="wiki-lbl">💡 CONSEILS LOCAUX</div>
+    <div class="wiki-text"><p>${s.conseils}</p></div>
+    <div class="wiki-lbl">🎣 TECHNIQUES</div>
+    <div class="wiki-chips">${techChips}</div>
+    ${s.leurres.length ? `<div class="wiki-lbl">🪝 LEURRES</div><div class="wiki-chips">${leurreChips}</div>` : ''}
+    ${s.appats.length ? `<div class="wiki-lbl">🪱 APPÂTS</div><div class="wiki-chips">${appatChips}</div>` : ''}
+    ${!s.quotaAlert ? `<div class="wiki-lbl">📋 RÉGLEMENTATION</div><div class="wiki-text"><p>${s.regie}</p></div>` : ''}
+    <button style="width:100%;margin-top:4px;background:var(--sea);border:none;color:#fff;border-radius:var(--r);padding:13px;font-size:14px;font-weight:700;cursor:pointer" onclick="wikiNav('techniques')">Voir les techniques de pêche →</button>
+    <div style="height:12px"></div>
+  </div>`;
+}
+
+function _wikiTechList() {
+  return `<div class="wiki-section-wrap">
+    <div class="wiki-section-hd">
+      <button class="wiki-back" onclick="wikiNav('home')">← Retour</button>
+      <div class="wiki-section-title">🎣 Techniques</div>
+    </div>
+    <div class="tech-wiki-list">
+      ${WIKI_TECHNIQUES.map(t => `
+        <div class="tech-wiki-card" onclick="wikiNav('tech-d','${t.id}')">
+          <div class="tech-wiki-ico">${t.emoji}</div>
+          <div class="tech-wiki-info">
+            <div class="tech-wiki-name">${t.name}</div>
+            <div class="tech-wiki-brief">${t.brief}</div>
+            <div class="tech-wiki-lvl">Niveau : ${t.niveau}</div>
+          </div>
+          <div style="color:var(--muted);font-size:18px">›</div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function _wikiTechDetail(id) {
+  const t = WIKI_TECHNIQUES.find(x => x.id === id);
+  if (!t) return _wikiTechList();
+  const cibles = t.cibles.map(c => `<span class="wchip blue">${c}</span>`).join('');
+  const leurres = t.leurres.map(l => `<span class="wchip orange">🪝 ${l}</span>`).join('');
+  const astuces = t.astuces.map(a => `<div class="astuce-item">💡 ${a}</div>`).join('');
+  return `<div class="wiki-section-wrap">
+    <div class="wiki-section-hd">
+      <button class="wiki-back" onclick="wikiNav('techniques')">← Techniques</button>
+    </div>
+    <div class="tech-detail-hero">
+      <div class="tech-detail-emo">${t.emoji}</div>
+      <div class="tech-detail-name">${t.name}</div>
+      <div class="tech-detail-brief">${t.brief}</div>
+      <div class="tech-detail-lvl">Niveau : ${t.niveau}</div>
+    </div>
+    <div class="wiki-lbl">🐟 ESPÈCES CIBLÉES</div>
+    <div class="wiki-chips" style="margin-bottom:10px">${cibles}</div>
+    <div class="wiki-lbl">🎒 MATÉRIEL</div>
+    <div class="materiel-box">
+      <div class="materiel-row"><div class="materiel-key">Canne</div><div class="materiel-val">${t.canne}</div></div>
+      <div class="materiel-row"><div class="materiel-key">Moulinet</div><div class="materiel-val">${t.moulinet}</div></div>
+      <div class="materiel-row"><div class="materiel-key">Ligne</div><div class="materiel-val">${t.ligne}</div></div>
+    </div>
+    <div class="wiki-lbl">🪝 LEURRES / APPÂTS</div>
+    <div class="wiki-chips" style="margin-bottom:10px">${leurres}</div>
+    <div class="wiki-lbl">⚙️ TECHNIQUE</div>
+    <div class="wiki-text"><p>${t.technique}</p></div>
+    <div class="wiki-lbl">💡 ASTUCES & CONSEILS</div>
+    <div class="astuce-list">${astuces}</div>
+    <div class="wiki-box" style="margin-top:10px"><div class="wiki-box-l">Saison</div><div class="wiki-box-v" style="font-size:13px;margin-top:4px">📅 ${t.saison}</div></div>
+    <div style="height:12px"></div>
+  </div>`;
+}
+
+function _wikiRegie() {
+  const rows = WIKI_REGLEMENTATION.map(r => `
+    <div class="reg-row">
+      <div class="reg-sp">${r.emo} ${r.sp}</div>
+      <div class="reg-sz">${r.sz}</div>
+      <div class="reg-qt ${r.alert?'alert':''}">${r.qt}</div>
+    </div>`).join('');
+  return `<div class="wiki-section-wrap">
+    <div class="wiki-section-hd">
+      <button class="wiki-back" onclick="wikiNav('home')">← Retour</button>
+      <div class="wiki-section-title">📋 Réglementation 2026</div>
+    </div>
+    <div class="wiki-alert">Réglementation pêche récréative en mer. Vérifier les arrêtés annuels (DIRM Nord) — ces données sont indicatives.</div>
+    <div class="reg-table">
+      <div class="reg-hd"><span style="flex:2">Espèce</span><span style="flex:1;text-align:center">Taille min</span><span style="flex:2;text-align:right">Quota/jour</span></div>
+      ${rows}
+    </div>
+    <div class="wiki-lbl">📌 RÈGLES GÉNÉRALES</div>
+    <div class="wiki-text"><p>• Marquage obligatoire : ablation de la partie inférieure de la nageoire caudale dès la capture des espèces réglementées<br>• Arénicole : 100 vers maximum par marée et par personne<br>• Anguille : pêche TOTALEMENT INTERDITE (tous stades)<br>• Trémail fixe : autorisation annuelle requise, interdit juin–septembre<br>• Juillet–août : pêche interdite depuis les plages surveillées de 10h à 19h</p></div>
+  </div>`;
+}
+
+function _wikiConseils() {
+  const mareeCards = WIKI_MAREES.map(m => `
+    <div class="conseil-card">
+      <div class="conseil-ico">${m.ico}</div>
+      <div><div class="conseil-title">${m.title}</div><div class="conseil-text">${m.text}</div></div>
+    </div>`).join('');
+  const saisonCards = WIKI_SAISONS.map(s => `
+    <div class="saison-card">
+      <div class="saison-ico">${s.ico}</div>
+      <div class="saison-label">${s.label}</div>
+      <div class="saison-tip">${s.tip}</div>
+    </div>`).join('');
+  const securite = WIKI_SECURITE.map(s => `<div class="securite-item">${s}</div>`).join('');
+  return `<div class="wiki-section-wrap">
+    <div class="wiki-section-hd">
+      <button class="wiki-back" onclick="wikiNav('home')">← Retour</button>
+      <div class="wiki-section-title">🌊 Marées & Conseils</div>
+    </div>
+    <div class="wiki-lbl">🌊 LIRE LES MARÉES</div>
+    ${mareeCards}
+    <div class="wiki-lbl">📅 CALENDRIER DES SAISONS</div>
+    <div class="saison-grid">${saisonCards}</div>
+    <div class="wiki-lbl">🚨 SÉCURITÉ EN MER</div>
+    <div class="securite-list">${securite}</div>
+    <div class="wiki-lbl">🎯 APPÂTS NATURELS LOCAUX</div>
+    <div class="wiki-text"><p>• <strong>Arénicole</strong> : à Malo Terminus lors des grandes marées. Max 100/marée. Conservation enroulée dans du journal au frigo.<br>• <strong>Couteaux</strong> : grandes marées uniquement, sur les bancs les plus bas. À conserver au frais dans l'eau de mer.<br>• <strong>Crevettes bouquets</strong> : la nuit aux abords des digues et enrochements. Conservation avec bulleur.<br>• <strong>Crabes mous</strong> : trouvés de nuit dans les zones de mue. Garder dans algues humides au frais.</p></div>
+    <div style="height:12px"></div>
+  </div>`;
+}
+
 // ── Utils ─────────────────────────────────────────────────────────────────────
 function toDDM(deg, axis) {
   const d = Math.floor(Math.abs(deg));
@@ -719,18 +1054,19 @@ function toast(msg, dur = 2600) {
 
 // Harmoniques de marée pour Dunkerque (source SHOM)
 const TIDE_REF = Date.UTC(1900, 0, 1, 0, 0, 0);
+// Constantes harmoniques calibrées empiriquement pour Dunkerque
+// Formule: h = Z0 + Σ A·cos(σt − G) avec t en heures depuis 1900-01-01 UTC
 const DK_CONST = [
-  { A: 3.09, s: 28.9841, G: 132.5 }, // M2
-  { A: 0.93, s: 30.0000, G: 163.7 }, // S2
-  { A: 0.57, s: 28.4397, G: 112.7 }, // N2
-  { A: 0.25, s: 30.0821, G: 163.1 }, // K2
-  { A: 0.17, s: 57.9682, G:  58.5 }, // M4
-  { A: 0.10, s: 15.0411, G: 289.1 }, // K1
-  { A: 0.09, s: 58.9841, G:  95.0 }, // MS4
-  { A: 0.07, s: 13.9430, G: 265.6 }, // O1
-  { A: 0.03, s: 14.9589, G: 288.8 }, // P1
+  { A: 2.10, s: 28.9841, G:  91.2 }, // M2 — calibré sur marées avril 2026
+  { A: 0.99, s: 30.0000, G: 182.0 }, // S2
+  { A: 0.20, s: 28.4397, G: 344.8 }, // N2
+  { A: 0.16, s: 30.0821, G: 170.3 }, // K2
+  { A: 0.17, s: 57.9682, G:  66.3 }, // M4
+  { A: 0.09, s: 58.9841, G: 111.0 }, // MS4
+  { A: 0.07, s: 15.0411, G: 305.7 }, // K1
+  { A: 0.06, s: 13.9430, G: 264.9 }, // O1
 ];
-const DK_MSL = 3.00;
+const DK_MSL = 3.80;
 
 function tideH(ms) {
   const h = (ms - TIDE_REF) / 3600000;
@@ -828,30 +1164,18 @@ async function loadMeteo() {
     const [ico, desc] = wmoDesc(cur.weather_code);
     const cond  = fishingCond(cur.wind_speed_10m, waveH);
 
-    // Marées 5 jours groupées par date
+    // Strip 14 jours
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-    const allTides = computeTideExtrema(todayStart.getTime(), 5 * 24);
-    const tidesByDay = {};
-    allTides.forEach(e => {
-      const key = new Date(e.t).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
-      (tidesByDay[key] = tidesByDay[key] || []).push(e);
-    });
-
-    const tidesHTML = Object.entries(tidesByDay).map(([label, events]) => {
-      const rows = events.map(e => {
-        const isPM = e.type === 'PM';
-        return `<div class="tide-row">
-          <div class="tide-ico">${isPM ? '🔼' : '🔽'}</div>
-          <div class="tide-time">${fmtTime(e.t)}</div>
-          <div>
-            <div class="tide-type ${isPM ? 'pm' : 'bm'}">${isPM ? 'Pleine mer' : 'Basse mer'}</div>
-            ${isPM ? `<div class="tide-coef">Coef. ~${tideCoef(e.h,'PM')}</div>` : ''}
-          </div>
-          <div class="tide-h">${e.h.toFixed(1)} m</div>
-        </div>`;
-      }).join('');
-      return `<div class="tide-day-label">${label.charAt(0).toUpperCase()+label.slice(1)}</div>
-              <div class="tide-card">${rows}</div>`;
+    const dateChips = Array.from({length:14}, (_,i) => {
+      const d = new Date(todayStart.getTime() + i*86400000);
+      const day = d.toLocaleDateString('fr-FR',{weekday:'short'});
+      const num = d.getDate();
+      const mon = d.toLocaleDateString('fr-FR',{month:'short'});
+      return `<div class="tide-chip${i===0?' active':''}" onclick="selectTideDate(${d.getTime()},this)">
+        <div class="tide-chip-day">${day}</div>
+        <div class="tide-chip-num">${num}</div>
+        <div class="tide-chip-month">${mon}</div>
+      </div>`;
     }).join('');
 
     // Prévisions — cartes cliquables
@@ -907,17 +1231,104 @@ async function loadMeteo() {
       <div class="forecast-strip">${forecastCards}</div>
       <div id="day-detail-wrap"></div>
 
-      <div class="met-section">🌊 Marées — Dunkerque (5 jours)</div>
-      ${tidesHTML}
-      <div style="font-size:10px;color:var(--muted);margin:6px 2px 16px">Prédiction harmonique SHOM — indicatif</div>
+      <div class="met-section">🌊 Marées — Dunkerque</div>
+      <div class="tide-date-strip">${dateChips}</div>
+      <div id="tide-day-detail"></div>
+      <div style="font-size:10px;color:var(--muted);margin:4px 2px 16px">Prédiction harmonique SHOM — indicatif</div>
     `;
 
+    renderTideDayDetail(todayStart.getTime());
     _meteoLoaded = true;
     setTimeout(() => { _meteoLoaded = false; }, 30 * 60 * 1000);
 
   } catch(err) {
     el.innerHTML = `<div class="met-loading">❌ Impossible de charger la météo.<br><small>Vérifiez votre connexion.</small></div>`;
   }
+}
+
+function selectTideDate(ms, el) {
+  document.querySelectorAll('.tide-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderTideDayDetail(ms);
+}
+
+function renderTideChart(dateMs) {
+  const W = 320, H = 100, PX = 12, PY = 8;
+  const pts = [];
+  for (let i = 0; i <= 96; i++) {
+    pts.push({ t: dateMs + i * 15 * 60000, h: tideH(dateMs + i * 15 * 60000) });
+  }
+  const minH = Math.min(...pts.map(p => p.h));
+  const maxH = Math.max(...pts.map(p => p.h));
+  const sx = t  => PX + ((t - dateMs) / 86400000) * (W - 2*PX);
+  const sy = h  => PY + (1 - (h - minH) / (maxH - minH)) * (H - 2*PY);
+
+  const linePts = pts.map(p => `${sx(p.t).toFixed(1)},${sy(p.h).toFixed(1)}`).join(' ');
+  const areaPath = `M${sx(pts[0].t).toFixed(1)},${sy(pts[0].h).toFixed(1)} ` +
+    pts.slice(1).map(p => `L${sx(p.t).toFixed(1)},${sy(p.h).toFixed(1)}`).join(' ') +
+    ` L${sx(pts[pts.length-1].t).toFixed(1)},${H+PY} L${sx(pts[0].t).toFixed(1)},${H+PY} Z`;
+
+  const extrema = computeTideExtrema(dateMs, 26).filter(e => e.t >= dateMs && e.t < dateMs + 86400000 + 3600000);
+  const dots = extrema.map(e => {
+    const cx = sx(e.t).toFixed(1), cy = sy(e.h).toFixed(1);
+    const isPM = e.type === 'PM';
+    const labelY = isPM ? +cy - 7 : +cy + 14;
+    return `<circle cx="${cx}" cy="${cy}" r="4" fill="${isPM?'#1c00fe':'#8a87aa'}" stroke="#fff" stroke-width="1.5"/>
+    <text x="${cx}" y="${labelY}" text-anchor="middle" font-size="9" font-weight="800" fill="${isPM?'#1c00fe':'#5c59a0'}">${e.h.toFixed(1)}m</text>`;
+  }).join('');
+
+  const now = Date.now();
+  const nowLine = (now >= dateMs && now < dateMs + 86400000)
+    ? `<line x1="${sx(now).toFixed(1)}" y1="${PY}" x2="${sx(now).toFixed(1)}" y2="${H}" stroke="#f43f5e" stroke-width="1.5" stroke-dasharray="3,2" opacity=".8"/>`
+    : '';
+
+  const hours = [0,6,12,18,24].map(h => {
+    const x = sx(dateMs + h*3600000).toFixed(1);
+    return `<text x="${x}" y="${H+14}" text-anchor="middle" font-size="9" fill="#b0aece">${h}h</text>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H+18}" style="width:100%;display:block;overflow:visible">
+    <defs>
+      <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#1c00fe" stop-opacity=".18"/>
+        <stop offset="100%" stop-color="#1c00fe" stop-opacity=".02"/>
+      </linearGradient>
+    </defs>
+    <path d="${areaPath}" fill="url(#tg)"/>
+    <polyline points="${linePts}" fill="none" stroke="#1c00fe" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${nowLine}${dots}${hours}
+  </svg>`;
+}
+
+function renderTideDayDetail(dateMs) {
+  const el = document.getElementById('tide-day-detail');
+  if (!el) return;
+  const extrema = computeTideExtrema(dateMs - 3600000, 26)
+    .filter(e => e.t >= dateMs && e.t < dateMs + 86400000 + 3600000);
+
+  const dateLabel = new Date(dateMs).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+
+  const rows = extrema.map(e => {
+    const isPM = e.type === 'PM';
+    const coef = tideCoef(e.h, e.type);
+    return `<div class="tide-row">
+      <div class="tide-ico">${isPM ? '🔼' : '🔽'}</div>
+      <div class="tide-time">${fmtTime(e.t)}</div>
+      <div style="flex:1">
+        <div class="tide-type ${isPM?'pm':'bm'}">${isPM?'Pleine mer':'Basse mer'}</div>
+        ${isPM ? `<div class="tide-coef">Coefficient ~${coef}</div>` : ''}
+      </div>
+      <div class="tide-h">${e.h.toFixed(1)} m</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="tide-chart-wrap">
+      <div class="tide-chart-title">${dateLabel.charAt(0).toUpperCase()+dateLabel.slice(1)}</div>
+      ${renderTideChart(dateMs)}
+    </div>
+    <div class="tide-card">${rows || '<div class="tide-row" style="color:var(--muted);font-size:13px">Aucune marée calculée</div>'}</div>
+  `;
 }
 
 function toggleDayDetail(dayIdx) {
