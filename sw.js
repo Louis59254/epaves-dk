@@ -1,10 +1,7 @@
-const CACHE = 'maz-fishing-v3';
-const APP_FILES = ['/', './index.html', './app.js', './data.js', './manifest.json'];
+// Cache uniquement les tuiles carte — jamais les fichiers app
+const CACHE = 'maz-tiles-v1';
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(APP_FILES)));
-  self.skipWaiting();
-});
+self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', e => {
   e.waitUntil(
@@ -16,26 +13,20 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
-  const isAppFile = APP_FILES.some(f =>
-    url.pathname === f.replace('.', '') ||
-    url.pathname.endsWith(f.replace('./', '/'))
-  );
-
-  if (isAppFile) {
-    // Network-first : toujours la dernière version si connecté
+  const url = e.request.url;
+  // Cacher tuiles OSM et Leaflet — les autres fichiers vont toujours au réseau
+  const isTile = url.includes('tile.openstreetmap') ||
+                 url.includes('openseamap') ||
+                 url.includes('unpkg.com/leaflet');
+  if (isTile) {
     e.respondWith(
-      fetch(e.request)
-        .then(res => {
+      caches.match(e.request).then(cached =>
+        cached || fetch(e.request).then(res => {
           caches.open(CACHE).then(c => c.put(e.request, res.clone()));
           return res;
         })
-        .catch(() => caches.match(e.request))
-    );
-  } else {
-    // Cache-first pour tiles carte et ressources externes
-    e.respondWith(
-      caches.match(e.request).then(cached => cached || fetch(e.request).catch(() => cached))
+      )
     );
   }
+  // Fichiers app (index.html, app.js…) : réseau direct, toujours à jour
 });

@@ -16,21 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderSpots();
   renderPeches();
   document.getElementById('sf-date').value = new Date().toISOString().split('T')[0];
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').then(reg => {
-      // Quand une nouvelle version est trouvée, recharger automatiquement
-      reg.addEventListener('updatefound', () => {
-        const nw = reg.installing;
-        nw.addEventListener('statechange', () => {
-          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-            window.location.reload();
-          }
-        });
-      });
-      // Forcer la vérification d'une mise à jour à chaque ouverture
-      reg.update();
-    }).catch(() => {});
-  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 });
 
 // ── Map ─────────────────────────────────────────────────────────────────────
