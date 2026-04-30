@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="245 épaves au large de Dunkerque — carte nautique interactive, GPS, spots pêche.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>MAZ Fishing</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <style>
+    :root {
+      /* Light backgrounds */
+      --bg:     #f3f4ff;
+      --surf:   #ffffff;
+      --surf2:  #eef0ff;
+      --surf3:  #e6e8ff;
+      /* Majorelle Blue */
+      --sea:    #1c00fe;
+      --sea-md: #4d39ff;
+      --sea-bg: #eceaff;
+      /* Status */
+      --gold:   #f59e0b; --green: #059669; --red: #f43f5e;
+      /* Text */
+      --text:   #0d0b2e;
+      --text2:  #6360a0;
+      --muted:  #b0aece;
+      /* Misc */
+      --r: 14px; --rb: 22px;
+      --sh: 0 2px 16px rgba(28,0,254,.08);
+      --sh-lg: 0 8px 32px rgba(28,0,254,.14);
+      --tab: 62px; --safe: env(safe-area-inset-bottom,0px);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;overflow:hidden}
+    #app{display:flex;flex-direction:column;height:100%}
+    #panels{flex:1;overflow:hidden;position:relative}
+
+    /* Header */
+    header{background:var(--surf);border-bottom:1px solid rgba(28,0,254,.07);padding:10px 14px 8px;display:flex;align-items:center;gap:10px;flex-shrink:0;box-shadow:0 1px 0 rgba(28,0,254,.06)}
+    .logo{display:flex;align-items:center;gap:8px}
+    .logo span{font-size:22px}
+    .logo-txt h1{font-size:17px;font-weight:900;color:var(--sea);letter-spacing:-.4px}
+    .logo-txt p{font-size:11px;color:var(--muted);margin-top:1px}
+    .h-stats{margin-left:auto;display:flex;gap:6px}
+    .stat-pill{background:var(--sea);border-radius:20px;padding:5px 11px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;color:#fff}
+    .stat-pill b{color:#fff}
+    .gps-btn{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);display:flex;align-items:center;gap:5px;transition:all .2s}
+    .gps-btn.on{color:#fff;border-color:var(--sea);background:var(--sea)}
+    .gps-btn svg{width:14px;height:14px}
+
+    /* Nav */
+    nav{display:flex;background:var(--surf);border-top:1.5px solid rgba(28,0,254,.08);height:calc(var(--tab) + var(--safe));padding-bottom:var(--safe);flex-shrink:0}
+    .tab-btn{flex:1;border:none;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);font-size:10px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.3px;text-transform:uppercase;position:relative}
+    .tab-btn svg{width:21px;height:21px}
+    .tab-btn.on{color:var(--sea)}
+    .tab-dot{width:28px;height:3px;border-radius:3px;background:var(--sea);position:absolute;top:0;opacity:0;transition:opacity .2s}
+    .tab-btn.on .tab-dot{opacity:1}
+
+    /* Panels */
+    .panel{position:absolute;inset:0;display:none}
+    .panel.on{display:flex;flex-direction:column}
+
+    /* MAP */
+    #leaflet-map{flex:1}
+    .map-ov{position:absolute;z-index:500;background:rgba(255,255,255,.96);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(28,0,254,.1);border-radius:var(--rb);box-shadow:var(--sh-lg)}
+    #msearch-wrap{top:10px;left:10px;right:10px;display:flex;align-items:center;gap:8px;padding:10px 14px}
+    #msearch-wrap svg{width:16px;height:16px;color:var(--muted);flex-shrink:0}
+    #msearch{flex:1;background:transparent;border:none;color:var(--text);font-size:14px;outline:none}
+    #msearch::placeholder{color:var(--muted)}
+    #mbadge{background:var(--sea);color:#fff;border-radius:12px;padding:3px 9px;font-size:11px;font-weight:700;white-space:nowrap}
+    .fab{position:absolute;right:12px;width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;z-index:500;transition:all .15s}
+    .fab svg{width:20px;height:20px}
+    .fab:active{transform:scale(.93)}
+    #fab-me{bottom:12px;background:var(--sea);color:#fff;box-shadow:var(--sh-lg)}
+    #fab-filter{bottom:66px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);color:var(--text);border:1.5px solid rgba(28,0,254,.12);box-shadow:var(--sh)}
+    #map-filters{bottom:120px;right:12px;left:12px;padding:14px 16px;display:none;flex-direction:column;gap:10px}
+    #map-filters.open{display:flex}
+    #map-filters h4{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);font-weight:700}
+    .fchips{display:flex;flex-wrap:wrap;gap:6px}
+    .chip{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--text2);white-space:nowrap;transition:all .15s;font-weight:600}
+    .chip.on{background:var(--sea);color:#fff;border-color:var(--sea);font-weight:700}
+
+    /* LIST */
+    .list-top{background:var(--surf);border-bottom:1px solid rgba(28,0,254,.07);flex-shrink:0;padding:10px 12px}
+    .srow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .swrap{flex:1;position:relative}
+    .sinput{width:100%;background:var(--surf2);border:1.5px solid var(--surf3);border-radius:var(--r);padding:9px 12px 9px 36px;color:var(--text);font-size:14px;outline:none;transition:border-color .15s}
+    .sinput:focus{border-color:var(--sea-md)}
+    .sinput::placeholder{color:var(--muted)}
+    .sico{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--muted);pointer-events:none}
+    .sortrow{display:flex;gap:5px;align-items:center;overflow-x:auto;scrollbar-width:none}
+    .sortrow::-webkit-scrollbar{display:none}
+    .sortrow span{font-size:11px;color:var(--muted);white-space:nowrap}
+    .sbtn{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:5px 11px;font-size:11px;cursor:pointer;color:var(--text2);white-space:nowrap;transition:all .15s;font-weight:600}
+    .sbtn.on{background:var(--sea);color:#fff;border-color:var(--sea);font-weight:700}
+    .qfrow{display:flex;gap:6px;overflow-x:auto;padding:8px 12px 0;scrollbar-width:none;flex-shrink:0}
+    .qfrow::-webkit-scrollbar{display:none}
+    .qf{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:6px 13px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);white-space:nowrap;transition:all .15s;flex-shrink:0}
+    .qf.on{background:var(--gold);color:#fff;border-color:var(--gold)}
+    #wlist{flex:1;overflow-y:auto;background:var(--bg);padding:10px 12px 12px;-webkit-overflow-scrolling:touch}
+    #wlist::-webkit-scrollbar{display:none}
+
+    /* Card */
+    .wc{background:var(--surf);border-radius:var(--r);padding:12px 12px 10px 15px;margin-bottom:8px;cursor:pointer;position:relative;overflow:hidden;transition:box-shadow .15s,transform .1s;display:flex;flex-direction:column;gap:6px;box-shadow:var(--sh)}
+    .wc:active{transform:scale(.985);box-shadow:none}
+    .wc-top{display:flex;align-items:flex-start;gap:8px}
+    .wc-ico{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+    .wc-info{flex:1;min-width:0}
+    .wc-name{font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+    .wc-sub{font-size:11px;color:var(--text2);margin-top:1px;font-weight:500}
+    .wc-r{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+    .dpill{font-size:13px;font-weight:800;padding:3px 9px;border-radius:20px}
+    .wmeta{display:flex;gap:5px;flex-wrap:wrap}
+    .tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+    .ty{background:rgba(245,158,11,.12);color:#b45309}
+    .td{background:rgba(244,63,94,.10);color:#e11d48}
+    .tg{background:rgba(5,150,105,.10);color:#059669}
+    .ts{background:var(--sea-bg);color:var(--sea-md)}
+    .tl{background:rgba(245,158,11,.12);color:#b45309}
+    .wgps{font-size:10px;color:var(--muted);font-family:monospace}
+
+    /* SPOTS */
+    .spots-hd{background:var(--surf);border-bottom:1px solid rgba(28,0,254,.07);padding:12px;flex-shrink:0}
+    .add-btn{width:100%;background:linear-gradient(135deg,#f59e0b 0%,#f97316 100%);border:none;border-radius:var(--r);padding:14px;font-size:15px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:opacity .15s;box-shadow:0 4px 16px rgba(245,158,11,.35)}
+    .add-btn:active{opacity:.88}
+    .add-btn svg{width:18px;height:18px}
+    #slist{flex:1;overflow-y:auto;background:var(--bg);padding:10px 12px;-webkit-overflow-scrolling:touch}
+    #slist::-webkit-scrollbar{display:none}
+    .sc{background:var(--surf);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;box-shadow:var(--sh)}
+    .sc-ico{width:40px;height:40px;border-radius:11px;background:rgba(245,158,11,.1);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+    .sc-info{flex:1}
+    .sc-name{font-size:14px;font-weight:700;color:var(--text)}
+    .sc-gps{font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px}
+    .sc-del{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:8px;transition:all .15s}
+    .sc-del:active{background:rgba(244,63,94,.1);color:var(--red)}
+    .sc-del svg{width:18px;height:18px}
+
+    /* PÊCHES panel */
+    .peches-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px 12px;background:var(--surf);border-bottom:1px solid rgba(28,0,254,.07);flex-shrink:0}
+    .p-stat{background:var(--sea);border-radius:var(--r);padding:14px 10px;text-align:center;box-shadow:0 4px 16px rgba(28,0,254,.25)}
+    .p-stat-v{font-size:24px;font-weight:900;color:#fff}
+    .p-stat-l{font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;margin-top:3px;font-weight:600}
+    .peches-hd{padding:12px 12px 8px;flex-shrink:0;background:var(--surf);border-bottom:1px solid rgba(28,0,254,.06)}
+    .add-btn-fish{width:100%;background:var(--sea);border:none;border-radius:var(--r);padding:14px;font-size:15px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:opacity .15s;box-shadow:0 4px 20px rgba(28,0,254,.3)}
+    .add-btn-fish:active{opacity:.88}
+    .pe-list{flex:1;overflow-y:auto;background:var(--bg);padding:10px 12px 12px;-webkit-overflow-scrolling:touch}
+    .pe-list::-webkit-scrollbar{display:none}
+
+    /* Session card */
+    .sec-card{background:var(--surf);border-radius:var(--r);padding:14px 14px 12px;margin-bottom:10px;cursor:pointer;position:relative;transition:box-shadow .15s,transform .1s;box-shadow:var(--sh);border-left:4px solid var(--sea)}
+    .sec-card:active{transform:scale(.985);box-shadow:none}
+    .sec-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+    .sec-date{font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:500}
+    .sec-wreck{font-size:16px;font-weight:800;color:var(--text)}
+    .sec-counts{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+    .sec-badge{background:var(--sea);color:#fff;border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700;white-space:nowrap}
+    .sec-rel{background:rgba(245,158,11,.12);color:#b45309}
+    .sec-cond{font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:500}
+    .sec-species{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px}
+    .sec-best{font-size:12px;color:var(--green);font-weight:700;margin-bottom:4px}
+    .sec-note{font-size:12px;color:var(--text2);font-style:italic;margin-top:6px;border-top:1px solid rgba(28,0,254,.07);padding-top:7px}
+    .sec-del{position:absolute;top:10px;right:10px;background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;transition:all .15s}
+    .sec-del:active{background:rgba(244,63,94,.1);color:var(--red)}
+
+    /* Session form modal */
+    #sfbg{position:fixed;inset:0;background:rgba(13,11,46,.5);backdrop-filter:blur(4px);z-index:1100;display:none;align-items:flex-end}
+    #sfbg.open{display:flex}
+    #sfmodal{background:var(--surf);border-radius:26px 26px 0 0;width:100%;max-height:92vh;overflow-y:auto;padding-bottom:calc(32px + var(--safe));animation:su .3s cubic-bezier(.32,.72,0,1)}
+    #sfmodal::-webkit-scrollbar{display:none}
+    .sf-hd{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 10px}
+    .sf-title{font-size:18px;font-weight:900;color:var(--text)}
+    .sfl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin:14px 20px 6px}
+    .sfinput{display:block;width:calc(100% - 40px);margin:0 20px;background:var(--surf2);border:1.5px solid var(--surf3);border-radius:var(--r);padding:11px 14px;color:var(--text);font-size:14px;outline:none;font-family:inherit;transition:border-color .15s}
+    .sfinput:focus{border-color:var(--sea);box-shadow:0 0 0 3px rgba(28,0,254,.08)}
+    textarea.sfinput{resize:none;min-height:72px}
+    .sf-pills{display:flex;gap:6px;flex-wrap:wrap;padding:0 20px}
+    .sfp{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);transition:all .15s;white-space:nowrap}
+    .sfp.on{background:var(--sea);color:#fff;border-color:var(--sea)}
+    .sf-search-wrap{position:relative;margin:0 20px}
+    .sf-search-wrap .sfinput{width:100%;margin:0}
+    .sf-drop{position:absolute;top:100%;left:0;right:0;background:var(--surf);border:1.5px solid rgba(28,0,254,.15);border-top:none;border-radius:0 0 var(--r) var(--r);z-index:10;overflow:hidden;max-height:180px;overflow-y:auto;box-shadow:var(--sh-lg)}
+    .sf-drop-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid rgba(28,0,254,.06);display:flex;justify-content:space-between;align-items:center;color:var(--text);font-weight:500}
+    .sf-drop-item:last-child{border:none}
+    .sf-drop-item:active{background:var(--surf2)}
+    .sf-sel{display:flex;align-items:center;justify-content:space-between;background:var(--sea);border-radius:var(--r);padding:10px 14px;margin:0 20px;font-size:13px;font-weight:600;color:#fff}
+    .sf-sel button{background:rgba(255,255,255,.25);border:none;color:#fff;cursor:pointer;font-size:14px;padding:2px 7px;line-height:1;border-radius:6px}
+    .sf-catches-hd{display:flex;align-items:center;justify-content:space-between;margin:14px 20px 8px}
+    .sf-add-catch{background:var(--sea);color:#fff;border:none;border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s}
+    .sf-add-catch:active{opacity:.8}
+    .catch-row{margin:0 20px 8px;background:var(--surf2);border-radius:var(--r);padding:10px 12px;border:1.5px solid var(--surf3)}
+    .cr-top{display:flex;gap:6px;margin-bottom:6px;align-items:center}
+    .cr-bot{display:flex;gap:6px}
+    .cr-inp{background:var(--surf);border:1.5px solid var(--surf3);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;font-family:inherit;min-width:0;transition:border-color .15s}
+    .cr-inp::placeholder{color:var(--muted)}
+    .cr-inp:focus{border-color:var(--sea)}
+    .cr-species{flex:2}
+    .cr-tech{flex:2}
+    .cr-weight,.cr-size{flex:1;-moz-appearance:textfield;width:0}
+    .cr-weight::-webkit-outer-spin-button,.cr-weight::-webkit-inner-spin-button,.cr-size::-webkit-outer-spin-button,.cr-size::-webkit-inner-spin-button{-webkit-appearance:none}
+    .cr-kept{background:rgba(5,150,105,.1);border:1.5px solid rgba(5,150,105,.25);color:var(--green);border-radius:8px;padding:6px 8px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
+    .cr-kept.released{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:#b45309}
+    .cr-del{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px 6px;font-size:16px;flex-shrink:0;line-height:1}
+    .sf-save{display:block;width:calc(100% - 40px);margin:16px 20px 0;background:var(--sea);border:none;border-radius:var(--r);padding:15px;font-size:16px;font-weight:800;color:#fff;cursor:pointer;transition:opacity .15s;box-shadow:0 4px 20px rgba(28,0,254,.3)}
+    .sf-save:active{opacity:.85}
+
+    /* Modal */
+    #mbg{position:fixed;inset:0;background:rgba(13,11,46,.5);backdrop-filter:blur(4px);z-index:1000;display:none;align-items:flex-end}
+    #mbg.open{display:flex}
+    #modal{background:var(--surf);border-radius:26px 26px 0 0;width:100%;max-height:92vh;overflow-y:auto;padding-bottom:calc(28px + var(--safe));animation:su .3s cubic-bezier(.32,.72,0,1)}
+    @keyframes su{from{transform:translateY(100%)}to{transform:translateY(0)}}
+    #modal::-webkit-scrollbar{display:none}
+    .mhandle{width:38px;height:4px;border-radius:2px;background:var(--surf3);margin:14px auto 0}
+    .mhero{padding:16px 20px 0;display:flex;align-items:flex-start;gap:14px}
+    .mico{width:54px;height:54px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0}
+    .mtitle{flex:1}
+    .mname{font-size:23px;font-weight:900;line-height:1.1;color:var(--text)}
+    .mtype{font-size:13px;color:var(--text2);margin-top:4px;font-weight:500}
+    .mclose{background:var(--surf2);border:none;color:var(--text2);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;font-weight:700}
+    .mtags{display:flex;gap:6px;flex-wrap:wrap;padding:10px 20px 0}
+    .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px 20px 0}
+    .sbox{background:var(--surf2);border-radius:var(--r);padding:13px;border:1px solid var(--surf3)}
+    .sbox-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+    .sbox-v{font-size:20px;font-weight:900;margin-top:4px;color:var(--text)}
+    .gpsb{margin:12px 20px 0;background:var(--surf2);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:10px;border:1px solid var(--surf3)}
+    .gpsb-i{flex:1}
+    .gpsb-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;font-weight:700}
+    .gpsb-v{font-family:monospace;font-size:13px;color:var(--sea);font-weight:700}
+    .cpybtn{background:var(--sea);border:none;color:#fff;padding:7px 13px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s;white-space:nowrap}
+    .cpybtn:active{opacity:.8}
+    .sec{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:14px 20px 6px;font-weight:700}
+    .ibox{margin:0 20px;background:var(--surf2);border-radius:var(--r);padding:13px 14px;border:1px solid var(--surf3)}
+    .ibox p{font-size:13px;line-height:1.65;color:var(--text2)}
+    .spgrid{display:flex;gap:8px;flex-wrap:wrap;padding:0 20px}
+    .spc{background:rgba(5,150,105,.08);border:1.5px solid rgba(5,150,105,.2);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--green)}
+    /* Techniques modal */
+    .tech-grid{display:flex;gap:8px;flex-wrap:wrap;padding:0 20px}
+    .tech-chip{background:var(--sea);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;color:#fff;white-space:nowrap}
+    .tech-note{font-size:12px;color:var(--text2);line-height:1.65;padding:8px 20px 2px}
+    .tech-season{font-size:12px;color:#b45309;padding:2px 20px 0;font-weight:700;background:none}
+    /* Catches history in modal */
+    .catches-wrap{margin:0 20px}
+    .catch-stat{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(28,0,254,.07)}
+    .catch-stat:last-child{border:none}
+    .catch-sp{font-size:13px;font-weight:700;flex:1;color:var(--text)}
+    .catch-n{font-size:12px;color:#fff;font-weight:700;background:var(--sea);border-radius:20px;padding:2px 9px}
+    .catch-rec{font-size:11px;color:var(--green);background:rgba(5,150,105,.1);border-radius:20px;padding:2px 8px;font-weight:600}
+    .madd-session{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;background:var(--sea);border:none;color:#fff;border-radius:var(--r);padding:13px;font-size:14px;font-weight:700;cursor:pointer;transition:opacity .15s;box-shadow:0 4px 16px rgba(28,0,254,.25)}
+    .madd-session:active{opacity:.85}
+    .macts{display:flex;gap:8px;padding:16px 20px 0}
+    .ap,.as{flex:1;padding:14px;border-radius:var(--r);border:none;cursor:pointer;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;transition:opacity .15s}
+    .ap{background:var(--sea);color:#fff;box-shadow:0 4px 16px rgba(28,0,254,.25)}
+    .as{background:var(--surf2);color:var(--text);border:1.5px solid var(--surf3)}
+    .ap:active,.as:active{opacity:.83}
+    .ap svg,.as svg{width:16px;height:16px}
+
+    /* Toast */
+    #toast{position:fixed;bottom:calc(var(--tab) + 14px + var(--safe));left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:3000;opacity:0;pointer-events:none;transition:opacity .25s;white-space:nowrap}
+    #toast.on{opacity:1}
+
+    /* User marker */
+    .medot{width:16px;height:16px;border-radius:50%;background:var(--sea);border:3px solid #fff;box-shadow:0 0 0 5px rgba(28,0,254,.25)}
+
+    /* Leaflet overrides */
+    .leaflet-container{background:#04030c}
+    .leaflet-popup-content-wrapper{background:rgba(255,255,255,.97);color:var(--text);border-radius:14px;border:1px solid rgba(28,0,254,.1);box-shadow:var(--sh-lg);padding:0}
+    .leaflet-popup-content{margin:12px 14px}
+    .leaflet-popup-tip{background:var(--surf)}
+    .pname{font-weight:800;font-size:14px;color:var(--text)}
+    .psub{font-size:11px;color:var(--text2);margin:2px 0 4px}
+    .pdepth{font-size:13px;font-weight:700;margin-bottom:6px;color:var(--text)}
+    .pbtn{width:100%;background:var(--sea);color:#fff;border:none;border-radius:8px;padding:8px;font-size:13px;font-weight:700;cursor:pointer}
+    .leaflet-control-zoom{border:none!important}
+    .leaflet-control-zoom a{background:rgba(255,255,255,.95)!important;color:var(--text)!important;border:1.5px solid rgba(28,0,254,.1)!important;backdrop-filter:blur(8px)!important}
+    .leaflet-control-zoom a:hover{background:#fff!important}
+    .marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background:rgba(28,0,254,.18)!important}
+    .marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background:rgba(28,0,254,.75)!important;color:#fff!important;font-weight:800}
+
+    /* Fish cards */
+    .fish-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px}
+    .fish-card{background:var(--surf2);border-radius:var(--r);padding:10px 11px;display:flex;align-items:center;gap:10px;border:1.5px solid var(--surf3)}
+    .fish-emo{font-size:26px;flex-shrink:0;line-height:1}
+    .fish-info{min-width:0}
+    .fish-name{font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .fish-best{font-size:10px;color:var(--text2);margin-top:2px;font-weight:500}
+    .fish-wiki-hint{font-size:10px;color:var(--sea);margin-top:3px;font-weight:600}
+    .fish-card[onclick]{transition:transform .15s,box-shadow .15s}
+    .fish-card[onclick]:hover{transform:scale(1.03);box-shadow:0 4px 16px rgba(28,0,254,.18)}
+
+    /* Technique cards */
+    .tech-cards{display:flex;flex-direction:column;gap:6px;padding:0 16px}
+    .tech-card{background:var(--surf2);border-radius:var(--r);padding:10px 12px;display:flex;align-items:center;gap:10px;border:1.5px solid var(--surf3)}
+    .tech-num{width:24px;height:24px;border-radius:50%;background:var(--sea);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .tech-name{font-size:13px;font-weight:700;color:var(--text);flex:1}
+    .tech-tip-box{margin:8px 16px 0;background:#fffbe6;border-radius:var(--r);padding:10px 12px;border:1.5px solid #fde68a}
+    .tech-tip-box p{font-size:12px;color:#92400e;line-height:1.6}
+    .season-pill{display:inline-flex;align-items:center;gap:5px;margin:8px 16px 0;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:20px;padding:6px 12px;font-size:12px;font-weight:600;color:#c2410c}
+
+    /* MÉTÉO panel */
+    .met-scroll{flex:1;overflow-y:auto;background:var(--bg);padding:12px;-webkit-overflow-scrolling:touch}
+    .met-scroll::-webkit-scrollbar{display:none}
+    .met-section{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin:16px 0 8px 2px}
+    .met-section:first-child{margin-top:0}
+    .met-now-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
+    .met-card{background:var(--surf);border-radius:var(--r);padding:14px 12px;box-shadow:var(--sh);display:flex;flex-direction:column;gap:4px}
+    .met-card-ico{font-size:26px;line-height:1}
+    .met-card-v{font-size:22px;font-weight:900;color:var(--text);line-height:1.1;margin-top:2px}
+    .met-card-l{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+    .met-card-sub{font-size:11px;color:var(--muted);margin-top:1px}
+    .met-cond{background:var(--surf);border-radius:var(--r);padding:14px 16px;box-shadow:var(--sh);display:flex;align-items:center;gap:12px;margin-bottom:4px}
+    .met-cond-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+    .met-cond-dot.good{background:#10b981}
+    .met-cond-dot.ok{background:#f59e0b}
+    .met-cond-dot.bad{background:#f43f5e}
+    .met-cond-txt{flex:1}
+    .met-cond-title{font-size:14px;font-weight:800;color:var(--text)}
+    .met-cond-sub{font-size:12px;color:var(--text2);margin-top:1px}
+    /* Tide */
+    .tide-card{background:var(--surf);border-radius:var(--r);padding:4px 0;box-shadow:var(--sh)}
+    .tide-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid rgba(28,0,254,.06)}
+    .tide-row:last-child{border:none}
+    .tide-ico{font-size:20px;flex-shrink:0;width:28px;text-align:center}
+    .tide-time{font-size:15px;font-weight:800;color:var(--text);flex:1}
+    .tide-type{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+    .tide-type.pm{color:var(--sea)}
+    .tide-type.bm{color:var(--text2)}
+    .tide-h{font-size:14px;font-weight:700;color:var(--text)}
+    .tide-coef{font-size:11px;color:var(--muted);text-align:right}
+    /* Forecast strip */
+    .forecast-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+    .fc-card{background:var(--surf);border-radius:12px;padding:10px 6px;box-shadow:var(--sh);text-align:center;display:flex;flex-direction:column;gap:3px;align-items:center;cursor:pointer;transition:all .15s;position:relative}
+    .fc-card:active{transform:scale(.96)}
+    .fc-card.active{background:var(--sea);box-shadow:0 4px 16px rgba(28,0,254,.3)}
+    .fc-card.active .fc-day,.fc-card.active .fc-temp,.fc-card.active .fc-wind,.fc-card.active .fc-chev{color:#fff}
+    .fc-day{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase}
+    .fc-ico{font-size:20px;line-height:1;margin:2px 0}
+    .fc-temp{font-size:13px;font-weight:800;color:var(--text)}
+    .fc-wind{font-size:10px;color:var(--text2);font-weight:600}
+    .fc-chev{font-size:11px;color:var(--muted);margin-top:1px;transition:transform .2s}
+    .fc-card.active .fc-chev{transform:rotate(180deg)}
+    /* Day detail */
+    .day-detail{background:var(--surf);border-radius:var(--r);margin-bottom:8px;box-shadow:var(--sh);overflow:hidden;animation:fadeIn .2s ease}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+    .dslot{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid rgba(28,0,254,.06)}
+    .dslot:last-child{border:none}
+    .dslot-label{font-size:11px;font-weight:700;color:var(--muted);min-width:58px;line-height:1.4}
+    .dslot-label small{display:block;font-size:10px;font-weight:500}
+    .dslot-ico{font-size:20px;flex-shrink:0}
+    .dslot-info{flex:1;min-width:0}
+    .dslot-temp{font-size:14px;font-weight:800;color:var(--text)}
+    .dslot-meta{font-size:11px;color:var(--text2);margin-top:2px}
+    .dslot-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+    .dslot-dot.good{background:#10b981}
+    .dslot-dot.ok{background:#f59e0b}
+    .dslot-dot.bad{background:#f43f5e}
+    /* Tide date strip */
+    .tide-date-strip{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}
+    .tide-date-strip::-webkit-scrollbar{display:none}
+    .tide-chip{background:var(--surf);border-radius:14px;padding:10px 8px;text-align:center;flex-shrink:0;cursor:pointer;box-shadow:var(--sh);transition:all .15s;min-width:54px}
+    .tide-chip:active{transform:scale(.94)}
+    .tide-chip.active{background:var(--sea);box-shadow:0 4px 16px rgba(28,0,254,.3)}
+    .tide-chip-day{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.3px}
+    .tide-chip.active .tide-chip-day{color:rgba(255,255,255,.7)}
+    .tide-chip-num{font-size:22px;font-weight:900;color:var(--text);line-height:1.1;margin:3px 0}
+    .tide-chip.active .tide-chip-num,.tide-chip.active .tide-chip-month{color:#fff}
+    .tide-chip-month{font-size:10px;color:var(--text2);font-weight:600}
+    /* Tide chart */
+    .tide-chart-wrap{background:var(--surf);border-radius:var(--r);padding:12px 10px 6px;box-shadow:var(--sh);margin-bottom:8px}
+    .tide-chart-title{font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px}
+    /* Loading/error */
+    .met-loading{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
+    /* Empty */
+    .empty{text-align:center;padding:60px 24px;color:var(--muted)}
+    .empty-ico{font-size:48px;margin-bottom:12px;opacity:.5}
+
+    /* ── CARTE VIEW TOGGLE ──────────────────────────────────────── */
+    .carte-header{background:var(--surf);border-bottom:1px solid rgba(28,0,254,.07);padding:6px 10px;flex-shrink:0;display:flex;align-items:center;gap:8px}
+    .carte-seg{display:flex;background:var(--surf2);border-radius:10px;padding:3px;flex:1;border:1.5px solid var(--surf3);gap:0}
+    .seg-btn{flex:1;padding:7px 8px;border:none;background:transparent;border-radius:7px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px}
+    .seg-btn svg{width:13px;height:13px;flex-shrink:0}
+    .seg-btn.on{background:var(--surf);color:var(--sea);box-shadow:0 1px 5px rgba(28,0,254,.14)}
+    #carte-map-view{flex:1;position:relative;overflow:hidden;display:flex;flex-direction:column}
+    #carte-list-view{flex:1;overflow:hidden;display:none;flex-direction:column}
+    #carte-list-view.on{display:flex}
+
+    /* ── INFO WIKI ──────────────────────────────────────────────── */
+    .info-scroll{flex:1;overflow-y:auto;background:var(--bg);-webkit-overflow-scrolling:touch}
+    .info-scroll::-webkit-scrollbar{display:none}
+    .wiki-home,.wiki-section-wrap,.fish-detail-wrap{padding:12px}
+    .wiki-title{font-size:20px;font-weight:900;color:var(--text);margin-bottom:3px}
+    .wiki-subtitle{font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.5}
+    .wiki-cats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}
+    .wiki-cat{background:var(--surf);border-radius:var(--r);padding:16px 14px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;cursor:pointer;box-shadow:var(--sh);transition:all .15s;border:1.5px solid transparent}
+    .wiki-cat:active{transform:scale(.96);border-color:var(--sea)}
+    .wiki-cat-ico{font-size:28px;line-height:1}
+    .wiki-cat-name{font-size:13px;font-weight:800;color:var(--text)}
+    .wiki-cat-sub{font-size:11px;color:var(--muted);font-weight:500}
+    /* Section header */
+    .wiki-section-hd{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+    .wiki-back{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:6px 13px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .15s}
+    .wiki-back:active{background:var(--surf3)}
+    .wiki-section-title{font-size:17px;font-weight:900;color:var(--text);flex:1}
+    /* Fish grid */
+    .fish-wiki-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .fish-wiki-card{background:var(--surf);border-radius:var(--r);padding:12px 11px 10px;cursor:pointer;box-shadow:var(--sh);transition:all .15s;border:1.5px solid transparent}
+    .fish-wiki-card:active{transform:scale(.96);border-color:var(--sea)}
+    .fish-wiki-emo{font-size:32px;line-height:1;margin-bottom:5px}
+    .fish-wiki-name{font-size:12px;font-weight:800;color:var(--text)}
+    .fish-wiki-nick{font-size:10px;color:var(--sea);font-weight:700}
+    .fish-wiki-size{font-size:10px;color:var(--text2);margin-top:2px}
+    .fish-season-dots{display:flex;gap:2px;margin-top:6px}
+    .sdot{width:6px;height:6px;border-radius:50%;background:var(--surf3)}
+    .sdot.on{background:var(--green)}
+    /* Fish detail */
+    .fish-detail-hero{background:var(--surf);border-radius:var(--r);padding:15px;margin-bottom:10px;box-shadow:var(--sh);display:flex;align-items:flex-start;gap:13px}
+    .fish-detail-emo{font-size:50px;line-height:1;flex-shrink:0}
+    .fish-detail-info{flex:1}
+    .fish-detail-name{font-size:19px;font-weight:900;color:var(--text);line-height:1.2}
+    .fish-detail-nick{font-size:12px;color:var(--sea);font-weight:700;margin-top:2px}
+    .fish-detail-latin{font-size:11px;color:var(--muted);font-style:italic}
+    .wiki-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+    .wiki-box{background:var(--surf);border-radius:var(--r);padding:12px 12px;box-shadow:var(--sh)}
+    .wiki-box-l{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:4px}
+    .wiki-box-v{font-size:14px;font-weight:800;color:var(--text);line-height:1.3}
+    .wiki-box-v.warn{color:var(--gold)}
+    .wiki-box-v.alert{color:var(--red)}
+    .wiki-box-v.good{color:var(--green)}
+    .wiki-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin:14px 0 6px}
+    .wiki-text{background:var(--surf);border-radius:var(--r);padding:13px 13px;box-shadow:var(--sh);margin-bottom:8px}
+    .wiki-text p{font-size:13px;line-height:1.65;color:var(--text2)}
+    .wiki-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+    .wchip{padding:5px 11px;border-radius:20px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+    .wchip.blue{background:var(--sea-bg);color:var(--sea)}
+    .wchip.green{background:rgba(5,150,105,.1);color:var(--green)}
+    .wchip.orange{background:rgba(245,158,11,.12);color:#b45309}
+    .wchip.red{background:rgba(244,63,94,.10);color:var(--red)}
+    .wiki-alert{background:rgba(244,63,94,.07);border:1.5px solid rgba(244,63,94,.2);border-radius:var(--r);padding:10px 13px;margin-bottom:8px;font-size:12px;color:#be123c;font-weight:600;line-height:1.5}
+    /* Techniques */
+    .tech-wiki-list{display:flex;flex-direction:column;gap:8px}
+    .tech-wiki-card{background:var(--surf);border-radius:var(--r);padding:13px 14px;cursor:pointer;box-shadow:var(--sh);display:flex;align-items:center;gap:12px;transition:all .15s}
+    .tech-wiki-card:active{transform:scale(.98)}
+    .tech-wiki-ico{font-size:26px;width:38px;text-align:center;flex-shrink:0}
+    .tech-wiki-info{flex:1;min-width:0}
+    .tech-wiki-name{font-size:14px;font-weight:800;color:var(--text)}
+    .tech-wiki-brief{font-size:11px;color:var(--text2);margin-top:2px}
+    .tech-wiki-lvl{font-size:10px;color:var(--sea);font-weight:700;margin-top:3px}
+    /* Tech detail */
+    .tech-detail-hero{background:linear-gradient(135deg,var(--sea) 0%,var(--sea-md) 100%);border-radius:var(--r);padding:18px;margin-bottom:10px;color:#fff}
+    .tech-detail-emo{font-size:40px;line-height:1;margin-bottom:8px}
+    .tech-detail-name{font-size:20px;font-weight:900}
+    .tech-detail-brief{font-size:13px;opacity:.85;margin-top:4px}
+    .tech-detail-lvl{font-size:11px;font-weight:700;background:rgba(255,255,255,.2);border-radius:20px;display:inline-block;padding:3px 11px;margin-top:8px}
+    .materiel-box{background:var(--surf);border-radius:var(--r);padding:13px;box-shadow:var(--sh);margin-bottom:8px}
+    .materiel-row{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid rgba(28,0,254,.06);align-items:flex-start}
+    .materiel-row:last-child{border:none;padding-bottom:0}
+    .materiel-key{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;width:55px;flex-shrink:0;padding-top:1px}
+    .materiel-val{font-size:12px;color:var(--text);line-height:1.5}
+    .astuce-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+    .astuce-item{background:var(--surf);border-radius:10px;padding:10px 13px;box-shadow:var(--sh);font-size:12px;color:var(--text2);line-height:1.5;border-left:3px solid var(--sea)}
+    /* Réglementation */
+    .reg-table{background:var(--surf);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}
+    .reg-hd{display:flex;background:var(--sea);padding:8px 12px;gap:4px}
+    .reg-hd span{font-size:10px;font-weight:700;color:rgba(255,255,255,.9);text-transform:uppercase;letter-spacing:.4px}
+    .reg-row{display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid rgba(28,0,254,.06);gap:4px}
+    .reg-row:last-child{border:none}
+    .reg-sp{flex:2;font-size:12px;font-weight:700;color:var(--text)}
+    .reg-sz{flex:1;font-size:12px;font-weight:800;color:var(--sea);text-align:center}
+    .reg-qt{flex:2;font-size:11px;color:var(--text2);text-align:right;font-weight:600;line-height:1.4}
+    .reg-qt.alert{color:var(--red);font-weight:700}
+    /* Conseils */
+    .conseil-card{background:var(--surf);border-radius:var(--r);padding:13px 14px;margin-bottom:8px;box-shadow:var(--sh);display:flex;gap:12px;align-items:flex-start}
+    .conseil-ico{font-size:26px;flex-shrink:0;width:36px;text-align:center}
+    .conseil-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:4px}
+    .conseil-text{font-size:12px;line-height:1.6;color:var(--text2)}
+    .saison-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+    .saison-card{background:var(--surf);border-radius:var(--r);padding:13px;box-shadow:var(--sh)}
+    .saison-ico{font-size:24px;margin-bottom:5px}
+    .saison-label{font-size:11px;font-weight:800;color:var(--text);margin-bottom:4px}
+    .saison-tip{font-size:11px;color:var(--text2);line-height:1.55}
+    .securite-list{display:flex;flex-direction:column;gap:6px}
+    .securite-item{background:var(--surf);border-radius:10px;padding:10px 13px;font-size:12px;color:var(--text2);box-shadow:var(--sh);line-height:1.4}
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">
+      <span>⚓</span>
+      <div class="logo-txt">
+        <h1>MAZ Fishing</h1>
+        <p>Dunkerque</p>
+      </div>
+    </div>
+    <div class="h-stats">
+      <div class="stat-pill"><b id="h-count">—</b>&nbsp;épaves</div>
+    </div>
+    <button class="gps-btn" id="gps-btn" onclick="toggleGPS()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+      </svg>
+      <span id="gps-lbl">GPS</span>
+    </button>
+  </header>
+
+  <div id="panels">
+
+    <!-- CARTE (map + liste fusionnés) -->
+    <div class="panel on" id="p-carte">
+      <!-- Toggle map/liste -->
+      <div class="carte-header">
+        <div class="carte-seg">
+          <button class="seg-btn on" id="ctog-map" onclick="setCarteView('map')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+              <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
+            </svg>
+            Carte
+          </button>
+          <button class="seg-btn" id="ctog-list" onclick="setCarteView('list')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            Liste épaves
+          </button>
+        </div>
+      </div>
+
+      <!-- Vue CARTE -->
+      <div id="carte-map-view">
+        <div class="map-ov" id="msearch-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input id="msearch" type="search" placeholder="Chercher une épave…" oninput="mapSearch()">
+          <div id="mbadge">—</div>
+        </div>
+        <div id="leaflet-map"></div>
+        <div class="map-ov" id="map-filters">
+          <h4>Type de navire</h4>
+          <div class="fchips" id="cat-chips"></div>
+          <h4 style="margin-top:10px">Distance depuis Dunkerque</h4>
+          <div class="fchips" id="dist-chips">
+            <span class="chip on" data-d="999" onclick="setDistF(this)">Toutes</span>
+            <span class="chip" data-d="5"   onclick="setDistF(this)">≤ 5 nm</span>
+            <span class="chip" data-d="10"  onclick="setDistF(this)">≤ 10 nm</span>
+            <span class="chip" data-d="20"  onclick="setDistF(this)">≤ 20 nm</span>
+          </div>
+        </div>
+        <button class="fab" id="fab-filter" onclick="toggleMapF()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/>
+            <line x1="11" y1="18" x2="13" y2="18"/>
+          </svg>
+        </button>
+        <button class="fab" id="fab-me" onclick="centerMe()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Vue LISTE -->
+      <div id="carte-list-view">
+        <div class="list-top">
+          <div class="srow">
+            <div class="swrap">
+              <svg class="sico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+              <input class="sinput" id="lsearch" type="search" placeholder="Nom, type d'épave…" oninput="renderList()">
+            </div>
+          </div>
+          <div class="sortrow">
+            <span>Trier :</span>
+            <button class="sbtn on" data-s="name"  onclick="setSort(this)">A → Z</button>
+            <button class="sbtn"    data-s="depth" onclick="setSort(this)">Profondeur</button>
+            <button class="sbtn"    data-s="port"  onclick="setSort(this)">Distance port</button>
+            <button class="sbtn"    data-s="dist"  id="sort-gps" style="display:none" onclick="setSort(this)">Ma position</button>
+          </div>
+        </div>
+        <div class="qfrow" id="qfrow">
+          <span class="qf on" data-q="all"     onclick="setQF(this)">Toutes (245)</span>
+          <span class="qf"    data-q="lowtide" onclick="setQF(this)">🏖 Marée basse</span>
+          <span class="qf"    data-q="dynamo"  onclick="setQF(this)">⚔️ Op. Dynamo</span>
+          <span class="qf"    data-q="shallow" onclick="setQF(this)">≤ 15 m</span>
+          <span class="qf"    data-q="deep"    onclick="setQF(this)">≥ 30 m</span>
+          <span class="qf"    data-q="near"    onclick="setQF(this)">≤ 10 nm port</span>
+          <span class="qf"    data-q="chalk"   onclick="setQF(this)">🎣 Chalutiers</span>
+          <span class="qf"    data-q="sub"     onclick="setQF(this)">🔭 Sous-marins</span>
+        </div>
+        <div id="wlist"></div>
+      </div>
+    </div>
+
+    <!-- INFO (wiki pêche) -->
+    <div class="panel" id="p-info">
+      <div class="info-scroll" id="info-scroll">
+        <div class="met-loading">⏳ Chargement…</div>
+      </div>
+    </div>
+
+    <!-- SPOTS -->
+    <div class="panel" id="p-spots">
+      <div class="spots-hd">
+        <button class="add-btn" onclick="addMySpot()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="16"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          Enregistrer ma position GPS
+        </button>
+      </div>
+      <div id="slist"></div>
+    </div>
+
+    <!-- MÉTÉO -->
+    <div class="panel" id="p-meteo">
+      <div class="met-scroll" id="met-scroll">
+        <div class="met-loading">⏳ Chargement météo…</div>
+      </div>
+    </div>
+
+    <!-- PÊCHES -->
+    <div class="panel" id="p-peches">
+      <div class="peches-stats">
+        <div class="p-stat"><div class="p-stat-v" id="ps-sessions">0</div><div class="p-stat-l">Sessions</div></div>
+        <div class="p-stat"><div class="p-stat-v" id="ps-prises">0</div><div class="p-stat-l">Prises</div></div>
+        <div class="p-stat"><div class="p-stat-v" id="ps-best">—</div><div class="p-stat-l">Record</div></div>
+      </div>
+      <div class="peches-hd">
+        <button class="add-btn-fish" onclick="openSF()">
+          🎣 &nbsp;Nouvelle session de pêche
+        </button>
+      </div>
+      <div class="pe-list" id="selist"></div>
+    </div>
+
+  </div>
+
+  <nav>
+    <button class="tab-btn on" id="nt-carte" onclick="showP('carte')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+        <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
+      </svg>
+      Carte
+      <div class="tab-dot"></div>
+    </button>
+    <button class="tab-btn" id="nt-info" onclick="showP('info')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        <line x1="12" y1="7" x2="12" y2="7.01"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/>
+      </svg>
+      Info
+      <div class="tab-dot"></div>
+    </button>
+    <button class="tab-btn" id="nt-spots" onclick="showP('spots')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+        <circle cx="12" cy="10" r="3"/>
+      </svg>
+      Mes spots
+      <div class="tab-dot"></div>
+    </button>
+    <button class="tab-btn" id="nt-peches" onclick="showP('peches')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 16.5c0 1.5-2.5 3.5-6 3.5s-6-2-6-3.5c0-2 2.5-3.5 6-3.5s6 1.5 6 3.5z"/>
+        <path d="M12 13V7"/><path d="M8.5 9.5S10 7 12 7s3.5 2.5 3.5 2.5"/>
+        <path d="M5 5c2-2 5-3 7-3s5 1 7 3"/>
+      </svg>
+      Pêches
+      <div class="tab-dot"></div>
+    </button>
+    <button class="tab-btn" id="nt-meteo" onclick="showP('meteo')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/>
+      </svg>
+      Météo
+      <div class="tab-dot"></div>
+    </button>
+  </nav>
+</div>
+
+<!-- WRECK MODAL -->
+<div id="mbg" onclick="closeMBG(event)">
+  <div id="modal">
+    <div class="mhandle"></div>
+    <div class="mhero">
+      <div class="mico" id="m-ico"></div>
+      <div class="mtitle">
+        <div class="mname" id="m-name">—</div>
+        <div class="mtype" id="m-type">—</div>
+      </div>
+      <button class="mclose" onclick="closeModal()">✕</button>
+    </div>
+    <div class="mtags" id="m-tags"></div>
+    <div class="sgrid">
+      <div class="sbox"><div class="sbox-l">Profondeur</div><div class="sbox-v" id="m-depth" style="color:var(--sea)">—</div></div>
+      <div class="sbox"><div class="sbox-l">Année naufrage</div><div class="sbox-v" id="m-year" style="color:var(--gold)">—</div></div>
+      <div class="sbox"><div class="sbox-l">Depuis port DK</div><div class="sbox-v" id="m-port" style="color:var(--text)">—</div></div>
+      <div class="sbox"><div class="sbox-l">Distance (vous)</div><div class="sbox-v" id="m-dist" style="color:var(--green)">—</div></div>
+    </div>
+    <div class="gpsb">
+      <div class="gpsb-i"><div class="gpsb-l">Coordonnées GPS</div><div class="gpsb-v" id="m-gps">—</div></div>
+      <button class="cpybtn" onclick="copyGPS()">Copier</button>
+    </div>
+    <div id="m-note-wrap" style="display:none">
+      <div class="sec">Description</div>
+      <div class="ibox"><p id="m-note"></p></div>
+    </div>
+    <!-- Espèces -->
+    <div class="sec">🐟 Espèces attendues</div>
+    <div id="m-sp"></div>
+    <!-- Techniques -->
+    <div class="sec">🪝 Techniques recommandées</div>
+    <div id="m-techs"></div>
+    <!-- Mes prises sur cette épave -->
+    <div class="sec" id="m-catches-sec">🏆 Mes prises ici</div>
+    <div class="catches-wrap" id="m-catches">
+      <p style="color:var(--muted);font-size:13px">Aucune prise enregistrée sur cette épave.</p>
+    </div>
+    <!-- Actions -->
+    <div style="padding:14px 20px 0">
+      <button class="madd-session" onclick="openSFFromModal()">
+        🎣 &nbsp;Enregistrer une session sur cette épave
+      </button>
+    </div>
+    <div class="macts">
+      <button class="ap" onclick="navToWreck()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+        Naviguer
+      </button>
+      <button class="as" onclick="saveWreck()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        Spot
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- SESSION FORM MODAL -->
+<div id="sfbg" onclick="closeSFBg(event)">
+  <div id="sfmodal">
+    <div class="mhandle"></div>
+    <div class="sf-hd">
+      <div class="sf-title" id="sf-title">🎣 Nouvelle session</div>
+      <button class="mclose" onclick="closeSF()">✕</button>
+    </div>
+
+    <div class="sfl">Date</div>
+    <input type="date" id="sf-date" class="sfinput">
+
+    <div class="sfl">Épave (optionnel)</div>
+    <div class="sf-search-wrap">
+      <input type="search" id="sf-wreck-q" class="sfinput" placeholder="Rechercher une épave…" oninput="filterSFWrecks()" autocomplete="off">
+      <div id="sf-wreck-drop" class="sf-drop"></div>
+    </div>
+    <div id="sf-wreck-sel" style="display:none;margin-top:6px">
+      <!-- filled by JS -->
+    </div>
+
+    <div class="sfl">Marée</div>
+    <div class="sf-pills" id="sf-tide">
+      <span class="sfp" data-v="montante"    onclick="setSFPill(this,'tide')">↑ Montante</span>
+      <span class="sfp" data-v="descendante" onclick="setSFPill(this,'tide')">↓ Descendante</span>
+      <span class="sfp" data-v="étale"       onclick="setSFPill(this,'tide')">→ Étale</span>
+    </div>
+
+    <div class="sfl">État de la mer</div>
+    <div class="sf-pills" id="sf-sea">
+      <span class="sfp" data-v="belle"  onclick="setSFPill(this,'sea')">⛵ Belle</span>
+      <span class="sfp" data-v="agitée" onclick="setSFPill(this,'sea')">〰️ Agitée</span>
+      <span class="sfp" data-v="forte"  onclick="setSFPill(this,'sea')">🌊 Forte</span>
+    </div>
+
+    <div class="sfl">Vent (optionnel)</div>
+    <input type="text" id="sf-wind" class="sfinput" placeholder="Ex : NE 15 kts">
+
+    <div class="sf-catches-hd">
+      <div class="sfl" style="margin:0">Prises</div>
+      <button class="sf-add-catch" onclick="addCatchRow()">+ Ajouter une prise</button>
+    </div>
+    <div id="sf-catches"></div>
+
+    <datalist id="fish-list">
+      <option value="Bar"><option value="Lieu jaune"><option value="Cabillaud">
+      <option value="Merlan"><option value="Congre"><option value="Raie">
+      <option value="Mulet"><option value="Maquereau"><option value="Sole">
+      <option value="Tacaud"><option value="Grondin"><option value="Éperlan">
+    </datalist>
+    <datalist id="tech-list">
+      <option value="Jigging vertical"><option value="Jigging lourd"><option value="Drop shot">
+      <option value="Shad"><option value="Verticale au vif"><option value="Traine lente">
+      <option value="Pêche au fond"><option value="Appât naturel"><option value="Lancer-ramener">
+      <option value="Popper"><option value="Ligne à plumes"><option value="Bas de ligne">
+    </datalist>
+
+    <div class="sfl">Note (optionnel)</div>
+    <textarea id="sf-note" class="sfinput" placeholder="Compte-rendu de la session, conditions, astuces…"></textarea>
+
+    <button class="sf-save" onclick="saveSession()">✓ &nbsp;Enregistrer la session</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="data.js?v=4"></script>
+<script src="app.js?v=5"></script>
+</body>
+</html>

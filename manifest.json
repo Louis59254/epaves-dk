@@ -1,0 +1,19 @@
+{
+  "name": "MAZ Fishing",
+  "short_name": "MAZ Fishing",
+  "description": "245 épaves au large de Dunkerque — carte nautique, GPS, journal de pêche",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#030112",
+  "theme_color": "#1c00fe",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' fill='%231c00fe' rx='32'/><text y='130' font-size='120' text-anchor='middle' x='96'>🎣</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["navigation", "travel", "sports"]
+}
