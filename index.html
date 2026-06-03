@@ -310,6 +310,8 @@
     .fish-name{font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .fish-best{font-size:10px;color:var(--text2);margin-top:2px;font-weight:500}
     .fish-wiki-hint{font-size:10px;color:var(--sea);margin-top:3px;font-weight:600}
+    .wp-type-btn{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s}
+    .wp-type-btn.on{background:var(--sea);color:#fff;border-color:var(--sea)}
     .fish-card[onclick]{transition:transform .15s,box-shadow .15s}
     .fish-card[onclick]:hover{transform:scale(1.03);box-shadow:0 4px 16px rgba(28,0,254,.18)}
 
@@ -604,17 +606,18 @@
           <div>
             <div class="layer-section-title">🗺 Fond de carte</div>
             <div class="layer-btns">
-              <button class="layer-btn" id="lb-osm" onclick="setBaseLayer('osm')">OSM Standard</button>
-              <button class="layer-btn on" id="lb-esri-ocean" onclick="setBaseLayer('esri-ocean')">🌊 Esri Océan</button>
-              <button class="layer-btn" id="lb-esri-topo" onclick="setBaseLayer('esri-topo')">Esri Topo</button>
+              <button class="layer-btn on" id="lb-peche" onclick="setBaseLayer('peche')">🎣 Style Pêche</button>
+              <button class="layer-btn" id="lb-esri-ocean" onclick="setBaseLayer('esri-ocean')">🌊 Esri Océan</button>
+              <button class="layer-btn" id="lb-osm" onclick="setBaseLayer('osm')">OSM</button>
             </div>
           </div>
           <div>
             <div class="layer-section-title">📡 Calques marins</div>
             <div class="layer-btns">
+              <button class="layer-btn on" id="lo-emodnet" onclick="toggleOverlay('emodnet')">🌈 Profondeurs EMODnet</button>
               <button class="layer-btn on" id="lo-seamark" onclick="toggleOverlay('seamark')">⚓ Seamarkers</button>
-              <button class="layer-btn" id="lo-esri-ref" onclick="toggleOverlay('esri-ref')">🔢 Profondeurs labels</button>
-              <button class="layer-btn" id="lo-gebco" onclick="toggleOverlay('gebco')">📊 GEBCO bathymétrie</button>
+              <button class="layer-btn" id="lo-esri-ref" onclick="toggleOverlay('esri-ref')">🔢 Labels prof.</button>
+              <button class="layer-btn" id="lo-gebco" onclick="toggleOverlay('gebco')">📊 GEBCO</button>
             </div>
           </div>
         </div>
@@ -750,6 +753,27 @@
   </nav>
 </div>
 
+<!-- WAYPOINT MODAL -->
+<div id="wp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:flex-end;justify-content:center">
+  <div style="background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 32px;width:100%;max-width:500px">
+    <div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:14px">📍 Ajouter un marqueur</div>
+    <input id="wp-name" type="text" placeholder="Nom (optionnel)…"
+      style="width:100%;background:var(--surf2);border:1.5px solid var(--surf3);border-radius:var(--r);padding:10px 14px;font-size:15px;color:var(--text);outline:none;margin-bottom:12px">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.06em;margin-bottom:8px">TYPE</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+      <button class="wp-type-btn on" data-t="fish"   onclick="document.querySelectorAll('.wp-type-btn').forEach(b=>b.classList.remove('on'));this.classList.add('on')">🐟 Poisson</button>
+      <button class="wp-type-btn"    data-t="anchor" onclick="document.querySelectorAll('.wp-type-btn').forEach(b=>b.classList.remove('on'));this.classList.add('on')">⚓ Mouillage</button>
+      <button class="wp-type-btn"    data-t="danger" onclick="document.querySelectorAll('.wp-type-btn').forEach(b=>b.classList.remove('on'));this.classList.add('on')">⚠️ Danger</button>
+      <button class="wp-type-btn"    data-t="wreck"  onclick="document.querySelectorAll('.wp-type-btn').forEach(b=>b.classList.remove('on'));this.classList.add('on')">🚢 Épave</button>
+      <button class="wp-type-btn"    data-t="spot"   onclick="document.querySelectorAll('.wp-type-btn').forEach(b=>b.classList.remove('on'));this.classList.add('on')">📍 Point</button>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeWpModal()" style="flex:1;background:var(--surf2);border:none;border-radius:var(--r);padding:13px;font-size:14px;font-weight:700;color:var(--text2);cursor:pointer">Annuler</button>
+      <button onclick="saveWpModal()" style="flex:2;background:var(--sea);border:none;border-radius:var(--r);padding:13px;font-size:14px;font-weight:700;color:#fff;cursor:pointer">Ajouter ✓</button>
+    </div>
+  </div>
+</div>
+
 <!-- WRECK MODAL -->
 <div id="mbg" onclick="closeMBG(event)">
   <div id="modal">
@@ -876,6 +900,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="data.js?v=4"></script>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

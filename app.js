@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('sf-date').value = new Date().toISOString().split('T')[0];
   // Update dynamic counts
   setTimeout(() => map.invalidateSize(), 100);
+  initWaypoints();
   document.querySelector('[data-q="all"]').textContent = `Toutes (${WRECKS.length})`;
   document.getElementById('mbadge').textContent = WRECKS.length;
   document.getElementById('h-count').textContent = WRECKS.length;
@@ -26,19 +27,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Map layers ───────────────────────────────────────────────────────────────
 const MAP_BASES = {
-  'osm': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  'peche': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, attribution: '© OSM'
   }),
   'esri-ocean': L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
     { maxZoom: 17, attribution: '© Esri, GEBCO, NOAA' }
   ),
-  'esri-topo': L.tileLayer(
-    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-    { maxZoom: 19, attribution: '© Esri' }
-  ),
+  'osm': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OSM'
+  }),
 };
 const MAP_OVERLAYS = {
+  'emodnet': L.tileLayer.wms('https://ows.emodnet-bathymetry.eu/wms', {
+    layers: 'emodnet:mean', styles: 'multicolour',
+    format: 'image/png', transparent: true, opacity: 0.85,
+    attribution: '© EMODnet', maxZoom: 12
+  }),
   'seamark': L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
     maxZoom: 18, opacity: 0.85
   }),
@@ -51,8 +56,9 @@ const MAP_OVERLAYS = {
     opacity: 0.5, attribution: '© GEBCO'
   }),
 };
-let _activeBase = 'esri-ocean';
-const _activeOverlays = new Set(['seamark']);
+// "Style Pêche" = OSM + EMODnet depth overlay auto
+let _activeBase = 'peche';
+const _activeOverlays = new Set(['emodnet', 'seamark']);
 
 // ── Compass ──────────────────────────────────────────────────────────────────
 let _compassHeading = null;
@@ -84,6 +90,7 @@ function _stopCompass() {
   window.removeEventListener('deviceorientation', _onOrientation, true);
   document.getElementById('fab-compass').classList.remove('on');
   document.getElementById('compass-rose').style.display = 'none';
+  if (_headingLine) { _headingLine.remove(); _headingLine = null; }
   if (userLat) updateMeDot();
 }
 
@@ -101,7 +108,121 @@ function _onOrientation(e) {
   rose.querySelector('.compass-deg').textContent = Math.round(heading) + '°';
   rose.querySelector('.compass-dir').textContent = dir;
   rose.querySelector('.compass-arrow').style.transform = `rotate(${heading}deg)`;
-  if (userLat) updateMeDot();
+  if (userLat) { updateMeDot(); _updateHeadingLine(); }
+}
+
+// ── Heading line ──────────────────────────────────────────────────────────────
+let _headingLine = null;
+
+function _destPoint(lat, lng, headingDeg, distKm) {
+  const R = 6371, δ = distKm / R, θ = headingDeg * Math.PI / 180;
+  const φ1 = lat * Math.PI / 180, λ1 = lng * Math.PI / 180;
+  const φ2 = Math.asin(Math.sin(φ1)*Math.cos(δ) + Math.cos(φ1)*Math.sin(δ)*Math.cos(θ));
+  const λ2 = λ1 + Math.atan2(Math.sin(θ)*Math.sin(δ)*Math.cos(φ1), Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
+  return [φ2 * 180/Math.PI, λ2 * 180/Math.PI];
+}
+
+function _updateHeadingLine() {
+  if (!_compassActive || _compassHeading == null || !userLat) {
+    if (_headingLine) { _headingLine.remove(); _headingLine = null; }
+    return;
+  }
+  const dist = 20 * 1.852; // 20nm en km
+  const dest = _destPoint(userLat, userLng, _compassHeading, dist);
+  const pts = [[userLat, userLng], dest];
+  if (_headingLine) { _headingLine.setLatLngs(pts); }
+  else {
+    _headingLine = L.polyline(pts, {
+      color: '#1c00fe', weight: 3, opacity: 0.9,
+      dashArray: '12 8'
+    }).addTo(map);
+    // Tip marker (arrowhead)
+  }
+}
+
+// ── Waypoints ─────────────────────────────────────────────────────────────────
+const WP_TYPES = {
+  fish:   { emoji: '🐟', label: 'Spot poisson',  color: '#059669' },
+  anchor: { emoji: '⚓', label: 'Mouillage',      color: '#1c00fe' },
+  danger: { emoji: '⚠️', label: 'Danger',         color: '#f43f5e' },
+  wreck:  { emoji: '🚢', label: 'Épave notée',    color: '#7c3aed' },
+  spot:   { emoji: '📍', label: 'Point',          color: '#f59e0b' },
+};
+
+let _wpMarkers = {};
+let _wpLatLng = null;
+let _longPressTimer = null;
+
+function getWaypoints() { return JSON.parse(localStorage.getItem('maz-waypoints') || '[]'); }
+function saveWaypoints(wps) { localStorage.setItem('maz-waypoints', JSON.stringify(wps)); }
+
+function initWaypoints() {
+  // Long press on map
+  let _touchMoved = false;
+  map.on('touchstart', e => {
+    _touchMoved = false;
+    _wpLatLng = e.latlng;
+    _longPressTimer = setTimeout(() => {
+      if (!_touchMoved) openWaypointModal(_wpLatLng);
+    }, 650);
+  });
+  map.on('touchmove', () => { _touchMoved = true; clearTimeout(_longPressTimer); });
+  map.on('touchend', () => clearTimeout(_longPressTimer));
+  map.on('contextmenu', e => openWaypointModal(e.latlng));
+  renderWaypoints();
+}
+
+function renderWaypoints() {
+  Object.values(_wpMarkers).forEach(m => m.remove());
+  _wpMarkers = {};
+  getWaypoints().forEach(wp => _addWpMarker(wp));
+}
+
+function _addWpMarker(wp) {
+  const t = WP_TYPES[wp.type] || WP_TYPES.spot;
+  const ico = L.divIcon({
+    className: '',
+    html: `<div style="background:${t.color};border:2.5px solid #fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,.4);cursor:pointer">${t.emoji}</div>
+           ${wp.name ? `<div style="background:rgba(255,255,255,.9);border-radius:6px;padding:1px 5px;font-size:10px;font-weight:700;color:#0d0b2e;margin-top:2px;white-space:nowrap;max-width:80px;overflow:hidden;text-align:center">${wp.name}</div>` : ''}`,
+    iconSize: [30, wp.name ? 46 : 30],
+    iconAnchor: [15, 15]
+  });
+  const m = L.marker([wp.lat, wp.lng], { icon: ico, zIndexOffset: 500 }).addTo(map);
+  m.on('click', () => openWaypointDetail(wp.id));
+  _wpMarkers[wp.id] = m;
+}
+
+function openWaypointModal(latlng) {
+  _wpLatLng = latlng;
+  const el = document.getElementById('wp-modal');
+  document.getElementById('wp-name').value = '';
+  document.querySelectorAll('.wp-type-btn').forEach(b => b.classList.remove('on'));
+  document.querySelector('.wp-type-btn[data-t="fish"]').classList.add('on');
+  el.style.display = 'flex';
+}
+
+function closeWpModal() { document.getElementById('wp-modal').style.display = 'none'; }
+
+function saveWpModal() {
+  const name = document.getElementById('wp-name').value.trim();
+  const type = document.querySelector('.wp-type-btn.on')?.dataset.t || 'spot';
+  if (!_wpLatLng) return;
+  const wp = { id: Date.now(), lat: _wpLatLng.lat, lng: _wpLatLng.lng, type, name };
+  const wps = getWaypoints(); wps.push(wp); saveWaypoints(wps);
+  _addWpMarker(wp);
+  closeWpModal();
+  toast('Marqueur ajouté');
+}
+
+function openWaypointDetail(id) {
+  const wp = getWaypoints().find(w => w.id === id);
+  if (!wp) return;
+  const t = WP_TYPES[wp.type] || WP_TYPES.spot;
+  if (confirm(`${t.emoji} ${wp.name || t.label}\n${wp.lat.toFixed(5)}N / ${wp.lng.toFixed(5)}E\n\nSupprimer ce marqueur ?`)) {
+    saveWaypoints(getWaypoints().filter(w => w.id !== id));
+    if (_wpMarkers[id]) { _wpMarkers[id].remove(); delete _wpMarkers[id]; }
+    toast('Marqueur supprimé');
+  }
 }
 
 // ── Layer switcher ────────────────────────────────────────────────────────────
@@ -147,10 +268,11 @@ function initMap() {
     zoomControl: true, attributionControl: false
   });
 
-  MAP_BASES['esri-ocean'].addTo(map);
+  MAP_BASES['peche'].addTo(map);
+  MAP_OVERLAYS['emodnet'].addTo(map);
   MAP_OVERLAYS['seamark'].addTo(map);
 
-  L.control.attribution({ prefix: '© Esri · OpenSeaMap' }).addTo(map);
+  L.control.attribution({ prefix: '© OSM · EMODnet · OpenSeaMap' }).addTo(map);
 
   cluster = L.markerClusterGroup({
     maxClusterRadius: 40,
