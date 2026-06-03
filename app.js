@@ -27,38 +27,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Map layers ───────────────────────────────────────────────────────────────
 const MAP_BASES = {
-  'peche': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '© OSM'
-  }),
-  'esri-ocean': L.tileLayer(
+  // Carte marine Esri : sondes de profondeur, isobathes, teinte bathymétrique
+  'marine': L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-    { maxZoom: 17, attribution: '© Esri, GEBCO, NOAA' }
+    { maxZoom: 16, attribution: '© Esri, GEBCO, NOAA', maxNativeZoom: 13 }
+  ),
+  // Satellite : voir les bancs de sable réels par eau claire
+  'satellite': L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 19, attribution: '© Esri, Maxar' }
   ),
   'osm': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, attribution: '© OSM'
   }),
 };
 const MAP_OVERLAYS = {
-  'emodnet': L.tileLayer.wms('https://ows.emodnet-bathymetry.eu/wms', {
+  // Profondeurs colorées (chaud = peu profond) — EMODnet bathymétrie
+  'depth': L.tileLayer.wms('https://ows.emodnet-bathymetry.eu/wms', {
     layers: 'emodnet:mean', styles: 'multicolour',
-    format: 'image/png', transparent: true, opacity: 0.85,
-    attribution: '© EMODnet', maxZoom: 12
+    format: 'image/png', transparent: true, opacity: 0.55,
+    attribution: '© EMODnet', maxZoom: 13
   }),
+  // Balisage maritime : bouées, phares, épaves, chenaux
   'seamark': L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
-    maxZoom: 18, opacity: 0.85
+    maxZoom: 18, opacity: 1
   }),
+  // Étiquettes de profondeur Esri
   'esri-ref': L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
-    { maxZoom: 17, opacity: 0.9, attribution: '© Esri' }
+    { maxZoom: 16, opacity: 1, maxNativeZoom: 13, attribution: '© Esri' }
   ),
-  'gebco': L.tileLayer.wms('https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv', {
-    layers: 'gebco_latest', format: 'image/png', transparent: true,
-    opacity: 0.5, attribution: '© GEBCO'
-  }),
 };
-// "Style Pêche" = OSM + EMODnet depth overlay auto
-let _activeBase = 'peche';
-const _activeOverlays = new Set(['emodnet', 'seamark']);
+// Défaut = carte marine Esri (sondes + isobathes) + balisage
+let _activeBase = 'marine';
+const _activeOverlays = new Set(['seamark']);
 
 // ── Compass ──────────────────────────────────────────────────────────────────
 let _compassHeading = null;
@@ -90,7 +92,8 @@ function _stopCompass() {
   window.removeEventListener('deviceorientation', _onOrientation, true);
   document.getElementById('fab-compass').classList.remove('on');
   document.getElementById('compass-rose').style.display = 'none';
-  if (_headingLine) { _headingLine.remove(); _headingLine = null; }
+  [_headingLine, _headingGlow, _headingTip].forEach(l => l && l.remove());
+  _headingLine = _headingGlow = _headingTip = null;
   if (userLat) updateMeDot();
 }
 
@@ -122,22 +125,33 @@ function _destPoint(lat, lng, headingDeg, distKm) {
   return [φ2 * 180/Math.PI, λ2 * 180/Math.PI];
 }
 
+let _headingGlow = null, _headingTip = null;
 function _updateHeadingLine() {
   if (!_compassActive || _compassHeading == null || !userLat) {
-    if (_headingLine) { _headingLine.remove(); _headingLine = null; }
+    [_headingLine, _headingGlow, _headingTip].forEach(l => l && l.remove());
+    _headingLine = _headingGlow = _headingTip = null;
     return;
   }
-  const dist = 20 * 1.852; // 20nm en km
+  const dist = 30 * 1.852; // 30nm en km
   const dest = _destPoint(userLat, userLng, _compassHeading, dist);
   const pts = [[userLat, userLng], dest];
-  if (_headingLine) { _headingLine.setLatLngs(pts); }
-  else {
-    _headingLine = L.polyline(pts, {
-      color: '#1c00fe', weight: 3, opacity: 0.9,
-      dashArray: '12 8'
-    }).addTo(map);
-    // Tip marker (arrowhead)
+  if (_headingLine) {
+    _headingGlow.setLatLngs(pts);
+    _headingLine.setLatLngs(pts);
+    _headingTip.setLatLng(dest);
+  } else {
+    // Halo large semi-transparent
+    _headingGlow = L.polyline(pts, { color: '#1c00fe', weight: 11, opacity: 0.18 }).addTo(map);
+    // Ligne nette centrale
+    _headingLine = L.polyline(pts, { color: '#1c00fe', weight: 4, opacity: 0.95, dashArray: '2 10', lineCap: 'round' }).addTo(map);
+    _headingTip = L.marker(dest, { interactive: false, icon: L.divIcon({
+      className: '', iconSize: [44, 22], iconAnchor: [22, 11],
+      html: `<div class="heading-label">CAP</div>`
+    })}).addTo(map);
   }
+  // Maj label cap
+  const lbl = _headingTip.getElement()?.querySelector('.heading-label');
+  if (lbl) lbl.textContent = Math.round(_compassHeading) + '°';
 }
 
 // ── Waypoints ─────────────────────────────────────────────────────────────────
@@ -157,19 +171,14 @@ function getWaypoints() { return JSON.parse(localStorage.getItem('maz-waypoints'
 function saveWaypoints(wps) { localStorage.setItem('maz-waypoints', JSON.stringify(wps)); }
 
 function initWaypoints() {
-  // Long press on map
-  let _touchMoved = false;
-  map.on('touchstart', e => {
-    _touchMoved = false;
-    _wpLatLng = e.latlng;
-    _longPressTimer = setTimeout(() => {
-      if (!_touchMoved) openWaypointModal(_wpLatLng);
-    }, 650);
-  });
-  map.on('touchmove', () => { _touchMoved = true; clearTimeout(_longPressTimer); });
-  map.on('touchend', () => clearTimeout(_longPressTimer));
+  // Leaflet 'contextmenu' = clic droit (desktop) ET appui long (mobile)
   map.on('contextmenu', e => openWaypointModal(e.latlng));
   renderWaypoints();
+}
+
+// Ajout rapide au centre de la carte (bouton +)
+function addWaypointCenter() {
+  openWaypointModal(map.getCenter());
 }
 
 function renderWaypoints() {
@@ -268,11 +277,10 @@ function initMap() {
     zoomControl: true, attributionControl: false
   });
 
-  MAP_BASES['peche'].addTo(map);
-  MAP_OVERLAYS['emodnet'].addTo(map);
+  MAP_BASES['marine'].addTo(map);
   MAP_OVERLAYS['seamark'].addTo(map);
 
-  L.control.attribution({ prefix: '© OSM · EMODnet · OpenSeaMap' }).addTo(map);
+  L.control.attribution({ prefix: '© Esri · OpenSeaMap' }).addTo(map);
 
   cluster = L.markerClusterGroup({
     maxClusterRadius: 40,
@@ -283,6 +291,13 @@ function initMap() {
 
   plotAll();
   map.addLayer(cluster);
+
+  // Fix robuste du dimensionnement (carte noire au chargement)
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => map.invalidateSize(false));
+    ro.observe(document.getElementById('leaflet-map'));
+  }
+  map.whenReady(() => setTimeout(() => map.invalidateSize(false), 250));
 }
 
 function catColor(cat) { return (CAT[cat] || CAT.autre).color; }
@@ -972,19 +987,19 @@ function delSession(id) {
 // ── WIKI DATA ─────────────────────────────────────────────────────────────────
 const WIKI_SPECIES = [
   { id:'bar', name:'Bar européen', nick:'Loup de mer', emoji:'🐟', latin:'Dicentrarchus labrax', taille:42, quota:'3/jour (avr–déc)', quotaAlert:true, saisons:[0,0,0,1,1,1,1,1,1,1,0,0], meilleures:'Sept–Oct', marees:'Montante · Descendante', profondeur:'5–30m (épaves, digues)', techniques:['Spinning leurres souples','Popper surface','Jigging vertical','Pêche à la posée'], leurres:['Shad 12–18cm (lançon)','Slug 15cm','Popper','Stickbait'], appats:['Arénicole','Sandeel vivant','Calamar'], desc:"Le bar commun est LE poisson phare de Dunkerque. Prédateur actif, il fréquente les épaves, les digues et les passes à fort courant. Particulièrement actif en période de migration automnale, il chasse en meute dans les courants.", conseils:"Pêcher à l'étale de basse mer sur les épaves peu profondes. Les imitations de lançon (sandeel) sont très efficaces en Manche. Sortir 1h avant la pleine mer montante pour les meilleures captures depuis les digues.", regie:"⚠️ Quota 3 bar/jour d'avril à décembre. NO-KILL OBLIGATOIRE du 1er février au 31 mars.", color:'#1c00fe' },
-  { id:'maquereau', name:'Maquereau', emoji:'🐡', latin:'Scomber scombrus', taille:20, quota:'20/jour', saisons:[0,0,0,1,1,1,1,1,0,0,0,0], meilleures:'Mai–Août', marees:'Toutes marées', profondeur:'0–30m (pélagique)', techniques:['Ligne à plumes','Sabiki','Spinning ultra-léger','Traine légère'], leurres:['Plumes 6 hameçons (rouge/blanc)','Sabiki','Leurre 3–5cm'], appats:['Morceaux de poisson','Calamar'], desc:"Le maquereau arrive dans les eaux dunkerquoises en mai-juin et repart en septembre. Poisson de bancs, visible en surface quand il chasse. Excellent appât vivant pour le bar.", conseils:"En bancs en surface, utiliser les plumes en lancer-ramener rapide. Le matin et le soir sont les meilleurs moments. Les bancs sont souvent signalés par des oiseaux en surface.", regie:'Taille min : 20cm. Quota : 20/jour.', color:'#059669' },
-  { id:'lieu', name:'Lieu jaune', emoji:'🟡', latin:'Pollachius pollachius', taille:30, quota:'2/jour · Fermé janv–avr', quotaAlert:true, saisons:[0,0,0,0,1,1,1,1,1,1,1,0], meilleures:'Oct–Nov', marees:'Descendante · Étale BM', profondeur:'15–50m (épaves)', techniques:['Jigging vertical','Ascenseur au leurre souple','Traine lente','Verticale jig'], leurres:['Shad 15–20cm (blanc/naturel)','Slug 20cm','Jig 60–150g','Black Minnow 200'], appats:['Calamar','Sandeel'], desc:"Le lieu jaune est le poisson roi des épaves dunkerquoises. Il stationne en bancs denses autour des structures. Les grands lieux (70–90cm) descendent des fonds atlantiques en hiver.", conseils:"Méthode ascenseur : descendre jusqu'au fond, remonter en moulinant régulièrement. Tresse multicolore (10m/couleur) indispensable. Pêcher 2–5m AU-DESSUS de l'épave.", regie:"⚠️ Pêche FERMÉE du 1er janvier au 30 avril. Quota : 2 lieux/jour du 1er mai au 31 déc. Taille : 30cm.", color:'#f59e0b' },
-  { id:'cabillaud', name:'Cabillaud', nick:'Morue', emoji:'🎣', latin:'Gadus morhua', taille:35, quota:'20/jour', saisons:[1,1,0,0,0,0,0,0,0,1,1,1], meilleures:'Nov–Fév', marees:'Montante · Faibles coeff', profondeur:'15–60m (fonds sableux, épaves)', techniques:['Surfcasting','Pêche au fond','Jigging lourd'], leurres:['Jig 80–200g','Leurre souple 20cm'], appats:['Grosse arénicole','Calamar','Couteau','Hareng'], desc:"La morue fréquente les eaux de la Manche en automne-hiver. Poisson de fond, il recherche les épaves et les enrochements. Les jetées dunkerquoises offrent de bonnes captures en décembre.", conseils:"Faibles coefficients souvent meilleurs (le courant réduit maintient l'appât en place). Pêcher la nuit depuis les jetées en décembre avec grosse arénicole.", regie:'Taille min : 35cm. Quota : 20/jour.', color:'#6360a0' },
-  { id:'merlan', name:'Merlan', emoji:'🐠', latin:'Merlangius merlangus', taille:23, quota:'20/jour', saisons:[1,1,0,0,0,0,0,0,0,0,1,1], meilleures:'Déc–Fév', marees:'Montante', profondeur:'10–40m (fonds sableux)', techniques:['Surfcasting nocturne','Pêche au fond','Palangrotte'], leurres:[], appats:['Arénicole','Crevette','Calamar','Ver de vase'], desc:"Poisson hivernal par excellence à Dunkerque, le merlan arrive en bancs en novembre-décembre. Sa chair délicate est très appréciée en cuisine. Se prend facilement depuis les jetées ou les plages.", conseils:"Pêche nocturne depuis les jetées très productive en décembre. La petite arénicole est l'appât idéal. Les plages de Malo-les-Bains offrent une bonne pêche au surfcasting.", regie:'Taille : 23cm. Quota : 20/jour.', color:'#64748b' },
-  { id:'sole', name:'Sole', emoji:'🫓', latin:'Solea solea', taille:24, quota:'10/jour', saisons:[0,0,0,1,1,1,1,1,0,0,0,0], meilleures:'Avr–Jul', marees:'Nuit · Montante douce', profondeur:'0–10m (fonds sableux)', techniques:['Surfcasting nocturne','Pêche à la posée'], leurres:[], appats:['Arénicole vive','Crevette grise','Ver de vase'], desc:"La sole est le poisson gastronomique des plages dunkerquoises. Timide et nocturne, elle se pêche surtout la nuit sur sable lors des températures douces au printemps.", conseils:"Pêche strictement nocturne de 22h à 3h. Petits hameçons (n°2–4) avec arénicole vive. Ne pas déplacer le montage trop souvent. Plages de Malo et Bray-Dunes très productives.", regie:'Taille : 24cm. Quota : 10/jour.', color:'#d97706' },
+  { id:'maquereau', name:'Maquereau', emoji:'🐡', latin:'Scomber scombrus', taille:30, quota:'Pas de quota', saisons:[0,0,0,1,1,1,1,1,0,0,0,0], meilleures:'Mai–Août', marees:'Toutes marées', profondeur:'0–30m (pélagique)', techniques:['Ligne à plumes','Sabiki','Spinning ultra-léger','Traine légère'], leurres:['Plumes 6 hameçons (rouge/blanc)','Sabiki','Leurre 3–5cm'], appats:['Morceaux de poisson','Calamar'], desc:"Le maquereau arrive dans les eaux dunkerquoises en mai-juin et repart en septembre. Poisson de bancs, visible en surface quand il chasse. Excellent appât vivant pour le bar.", conseils:"En bancs en surface, utiliser les plumes en lancer-ramener rapide. Le matin et le soir sont les meilleurs moments. Les bancs sont souvent signalés par des oiseaux en surface.", regie:'Taille min : 30cm (Mer du Nord). Pas de quota loisir.', color:'#059669' },
+  { id:'lieu', name:'Lieu jaune', emoji:'🟡', latin:'Pollachius pollachius', taille:42, quota:'3/jour · Fermé janv–avr', quotaAlert:true, saisons:[0,0,0,0,1,1,1,1,1,1,1,0], meilleures:'Oct–Nov', marees:'Descendante · Étale BM', profondeur:'15–50m (épaves)', techniques:['Jigging vertical','Ascenseur au leurre souple','Traine lente','Verticale jig'], leurres:['Shad 15–20cm (blanc/naturel)','Slug 20cm','Jig 60–150g','Black Minnow 200'], appats:['Calamar','Sandeel'], desc:"Le lieu jaune est le poisson roi des épaves dunkerquoises. Il stationne en bancs denses autour des structures. Les grands lieux (70–90cm) descendent des fonds atlantiques en hiver.", conseils:"Méthode ascenseur : descendre jusqu'au fond, remonter en moulinant régulièrement. Tresse multicolore (10m/couleur) indispensable. Pêcher 2–5m AU-DESSUS de l'épave.", regie:"⚠️ Pêche FERMÉE du 1er janvier au 30 avril. Quota : 3 lieux/jour du 1er mai au 31 déc (zone Nord 2026). Taille min : 42cm.", color:'#f59e0b' },
+  { id:'cabillaud', name:'Cabillaud', nick:'Morue', emoji:'🎣', latin:'Gadus morhua', taille:42, quota:'Très restreint', saisons:[1,1,0,0,0,0,0,0,0,1,1,1], meilleures:'Nov–Fév', marees:'Montante · Faibles coeff', profondeur:'15–60m (fonds sableux, épaves)', techniques:['Surfcasting','Pêche au fond','Jigging lourd'], leurres:['Jig 80–200g','Leurre souple 20cm'], appats:['Grosse arénicole','Calamar','Couteau','Hareng'], desc:"La morue fréquente les eaux de la Manche en automne-hiver. Poisson de fond, il recherche les épaves et les enrochements. Les jetées dunkerquoises offrent de bonnes captures en décembre.", conseils:"Faibles coefficients souvent meilleurs (le courant réduit maintient l'appât en place). Pêcher la nuit depuis les jetées en décembre avec grosse arénicole.", regie:'Taille min : 42cm (zone Nord). Stock effondré — captures très restreintes.', color:'#6360a0' },
+  { id:'merlan', name:'Merlan', emoji:'🐠', latin:'Merlangius merlangus', taille:27, quota:'Pas de quota', saisons:[1,1,0,0,0,0,0,0,0,0,1,1], meilleures:'Déc–Fév', marees:'Montante', profondeur:'10–40m (fonds sableux)', techniques:['Surfcasting nocturne','Pêche au fond','Palangrotte'], leurres:[], appats:['Arénicole','Crevette','Calamar','Ver de vase'], desc:"Poisson hivernal par excellence à Dunkerque, le merlan arrive en bancs en novembre-décembre. Sa chair délicate est très appréciée en cuisine. Se prend facilement depuis les jetées ou les plages.", conseils:"Pêche nocturne depuis les jetées très productive en décembre. La petite arénicole est l'appât idéal. Les plages de Malo-les-Bains offrent une bonne pêche au surfcasting.", regie:'Taille min : 27cm. Pas de quota loisir.', color:'#64748b' },
+  { id:'sole', name:'Sole', emoji:'🫓', latin:'Solea solea', taille:25, quota:'Pas de quota', saisons:[0,0,0,1,1,1,1,1,0,0,0,0], meilleures:'Avr–Jul', marees:'Nuit · Montante douce', profondeur:'0–10m (fonds sableux)', techniques:['Surfcasting nocturne','Pêche à la posée'], leurres:[], appats:['Arénicole vive','Crevette grise','Ver de vase'], desc:"La sole est le poisson gastronomique des plages dunkerquoises. Timide et nocturne, elle se pêche surtout la nuit sur sable lors des températures douces au printemps.", conseils:"Pêche strictement nocturne de 22h à 3h. Petits hameçons (n°2–4) avec arénicole vive. Ne pas déplacer le montage trop souvent. Plages de Malo et Bray-Dunes très productives.", regie:'Taille min : 25cm (depuis mai 2023). Pas de quota loisir.', color:'#d97706' },
   { id:'plie', name:'Plie', nick:'Carrelet', emoji:'🪸', latin:'Pleuronectes platessa', taille:27, quota:'20/jour', saisons:[0,0,1,1,1,1,1,1,0,0,0,0], meilleures:'Mar–Jun', marees:'Montante · Coeff ≥60', profondeur:'0–40m (fonds sableux)', techniques:['Surfcasting','Pêche au fond','Pêche à la posée'], leurres:['Jig léger avec appât'], appats:['Couteau','Crevette grise','Crabe mou','Arénicole'], desc:"La plie est très présente dans les eaux dunkerquoises au printemps. Poisson plat de fond, elle se nourrit de crustacés et de vers sur les bancs sableux.", conseils:"Pêcher sur fonds sableux plats avec couteaux ou arénicoles. Les grandes marées de printemps sont idéales. Les bancs de Flandre (3–15m) sont riches en plies.", regie:'Taille : 27cm. Quota : 20/jour.', color:'#92400e' },
   { id:'grondin', name:'Grondin rouge', emoji:'🦞', latin:'Chelidonichthys cuculus', taille:20, quota:'Pas de quota', saisons:[0,0,0,0,1,1,1,1,1,1,0,0], meilleures:'Jun–Sep', marees:'Descendante', profondeur:'20–60m (fonds sableux, épaves)', techniques:['Jigging léger','Pêche au fond'], leurres:['Petit shad 8–12cm','Jig 40–80g'], appats:['Calamar','Crevette','Poisson mort manoeuvré'], desc:"Caractéristique des épaves de la Manche, le grondin rouge émet un bruit lorsqu'on le sort de l'eau. Prise fréquente et annexe lors de la pêche du lieu jaune.", conseils:"Commun sur les épaves dunkerquoises en été. Sa chair rosée est excellente mais sous-estimée. Se tient au fond, pêcher avec un jig ou leurre souple.", regie:'Taille : 20cm. Aucun quota officiel.', color:'#dc2626' },
   { id:'seiche', name:'Seiche', emoji:'🦑', latin:'Sepia officinalis', taille:13, quota:'20/jour', saisons:[0,0,1,1,1,1,0,0,0,0,0,0], meilleures:'Mar–Mai', marees:'Montante · Coeff 60-90', profondeur:'5–30m (épaves, herbiers)', techniques:['Turlutte (EGI)','Pêche au vif','Traine lente'], leurres:['Turlutte EGI 2.5–3.5 (naturel/crevette)'], appats:['Crevette vivante','Calamar'], desc:"La seiche arrive sur les côtes dunkerquoises au printemps pour se reproduire sur les épaves peu profondes. Sa pêche à la turlutte est très ludique et la chair est excellente.", conseils:"Animation darting : lancer la turlutte, laisser couler au fond, tirer brusquement vers le haut, pause. Les seiches attaquent souvent à la descente. La nuit avec turlutte lumineuse est très productive.", regie:'Taille manteau : 13cm. Quota : 20/jour.', color:'#7c3aed' },
-  { id:'raie', name:'Raie bouclée', emoji:'🦈', latin:'Raja clavata', taille:45, quota:'5/jour', saisons:[0,0,0,0,0,1,1,1,1,0,0,0], meilleures:'Jun–Sep', marees:'Étale · Faibles courants', profondeur:'10–50m (fonds sableux)', techniques:['Pêche au fond','Surfcasting lourd'], leurres:[], appats:['Hareng','Maquereau coupé','Calamar','Crevette'], desc:"La raie bouclée est la plus commune dans les eaux dunkerquoises. Elle chasse sur les fonds sableux lors des étales de marée. La joue de raie est un mets délicat.", conseils:"Pêcher à l'étale de BM ou PM. Gros montages avec appâts odorants. Elle résiste avec ses ailes au ferrage. Changer l'appât régulièrement (crabes voleurs).", regie:'Taille : 45cm. Quota : 5/jour. Relâcher les espèces non identifiées.', color:'#065f46' },
+  { id:'raie', name:'Raie bouclée', emoji:'🦈', latin:'Raja clavata', taille:45, quota:'5/jour', saisons:[0,0,0,0,0,1,1,1,1,0,0,0], meilleures:'Jun–Sep', marees:'Étale · Faibles courants', profondeur:'10–50m (fonds sableux)', techniques:['Pêche au fond','Surfcasting lourd'], leurres:[], appats:['Hareng','Maquereau coupé','Calamar','Crevette'], desc:"La raie bouclée est la plus commune dans les eaux dunkerquoises. Elle chasse sur les fonds sableux lors des étales de marée. La joue de raie est un mets délicat.", conseils:"Pêcher à l'étale de BM ou PM. Gros montages avec appâts odorants. Elle résiste avec ses ailes au ferrage. Changer l'appât régulièrement (crabes voleurs).", regie:'Pas de taille mini UE communautaire. Espèce surveillée — relâcher les raies non identifiées (certaines espèces protégées).', color:'#065f46' },
   { id:'dorade', name:'Dorade grise', emoji:'⭕', latin:'Spondyliosoma cantharus', taille:23, quota:'20/jour', saisons:[0,0,0,0,0,1,1,1,1,0,0,0], meilleures:'Jul–Sep', marees:'Montante · Nuit', profondeur:'5–30m (épaves, digues)', techniques:['Pêche aux appâts','Spinning léger','Drop shot'], leurres:['Shad 8–12cm','Vers artificiel'], appats:['Crabe mou','Moule','Crevette','Calamar'], desc:"La dorade grise est attirée par les eaux tièdes des rejets de la centrale de Gravelines en été. Elle fréquente aussi les épaves et digues.", conseils:"La zone de Gravelines est un hotspot en juillet-août. Pêcher la nuit de préférence. Les crabes mous sont l'appât le plus efficace. Peut se prendre en popper depuis les digues.", regie:'Taille : 23cm. Quota : 20/jour.', color:'#0ea5e9' },
-  { id:'congre', name:'Congre', emoji:'🐍', latin:'Conger conger', taille:58, quota:'5/jour', saisons:[0,0,0,0,1,1,1,1,1,1,0,0], meilleures:'Jun–Oct', marees:'Nuit · Étale', profondeur:'10–50m (épaves)', techniques:['Pêche au fond','Jigging lourd XXL'], leurres:['Jig 100–200g','Leurre souple XXL'], appats:['Maquereau entier','Calmar entier','Hareng'], desc:"Le congre vit dans les cavités des épaves. Il peut atteindre de très grandes tailles (>2m). Poisson de nuit, sa pêche nécessite du matériel costaud et du ferme au ferrage.", conseils:"Matériel renforcé : tresse PE 3–4, bas de ligne acier. Le congre se réfugie dans la structure au ferrage, ferrer et tenir ! Maquereau entier au fond la nuit sur les épaves profondes.", regie:'Taille : 58cm. Quota : 5/jour.', color:'#1a1a2e' },
+  { id:'congre', name:'Congre', emoji:'🐍', latin:'Conger conger', taille:60, quota:'Pas de quota', saisons:[0,0,0,0,1,1,1,1,1,1,0,0], meilleures:'Jun–Oct', marees:'Nuit · Étale', profondeur:'10–50m (épaves)', techniques:['Pêche au fond','Jigging lourd XXL'], leurres:['Jig 100–200g','Leurre souple XXL'], appats:['Maquereau entier','Calmar entier','Hareng'], desc:"Le congre vit dans les cavités des épaves. Il peut atteindre de très grandes tailles (>2m). Poisson de nuit, sa pêche nécessite du matériel costaud et du ferme au ferrage.", conseils:"Matériel renforcé : tresse PE 3–4, bas de ligne acier. Le congre se réfugie dans la structure au ferrage, ferrer et tenir ! Maquereau entier au fond la nuit sur les épaves profondes.", regie:'Taille min : 60cm. Pas de quota loisir.', color:'#1a1a2e' },
   { id:'turbot', name:'Turbot', emoji:'🪅', latin:'Scophthalmus maximus', taille:30, quota:'5/jour', saisons:[0,0,0,0,0,1,1,1,1,0,0,0], meilleures:'Jun–Août', marees:'Descendante · Étale', profondeur:'5–50m (fonds sableux)', techniques:['Traine lente','Pêche au vif','Jigging lent'], leurres:['Imitation lançon (sandeel)','Shad naturel'], appats:['Sandeel vivant','Calamar','Sprat'], desc:"Le turbot est le poisson gastronomique ultime, rare mais présent en été. Sa pêche est difficile mais la récompense est à la hauteur. Les fonds sableux entre les épaves sont ses zones de chasse.", conseils:"Traine lente (1–2 nœuds) sur fonds sableux avec sandeel naturel. Attaques discrètes. Prise accessoire rare mais recherchée lors des sorties bateau.", regie:'Taille : 30cm. Quota : 5/jour.', color:'#0f766e' },
-  { id:'flet', name:'Flet', emoji:'🫓', latin:'Platichthys flesus', taille:23, quota:'20/jour', saisons:[1,1,1,0,0,0,0,0,0,1,1,1], meilleures:'Oct–Mar', marees:'Montante · Forte marée', profondeur:'0–20m (estuaires, plages)', techniques:['Surfcasting','Pêche à la posée légère'], leurres:[], appats:['Arénicole','Crevette grise','Ver de vase'], desc:"Le flet est le poisson plat le plus commun des côtes dunkerquoises. Résistant, il supporte les eaux saumâtres et est présent toute l'année, surtout en automne-hiver.", conseils:"Facile à pêcher depuis les plages avec arénicole. Les fortes marées d'hiver le poussent sur les plages. Indicateur fiable de la présence de poissons.", regie:'Taille : 23cm. Quota : 20/jour.', color:'#64748b' },
+  { id:'flet', name:'Flet', emoji:'🫓', latin:'Platichthys flesus', taille:20, quota:'Pas de quota', saisons:[1,1,1,0,0,0,0,0,0,1,1,1], meilleures:'Oct–Mar', marees:'Montante · Forte marée', profondeur:'0–20m (estuaires, plages)', techniques:['Surfcasting','Pêche à la posée légère'], leurres:[], appats:['Arénicole','Crevette grise','Ver de vase'], desc:"Le flet est le poisson plat le plus commun des côtes dunkerquoises. Résistant, il supporte les eaux saumâtres et est présent toute l'année, surtout en automne-hiver.", conseils:"Facile à pêcher depuis les plages avec arénicole. Les fortes marées d'hiver le poussent sur les plages. Indicateur fiable de la présence de poissons.", regie:'Taille min : 20cm (Mer du Nord). Pas de quota loisir.', color:'#64748b' },
 ];
 
 const WIKI_TECHNIQUES = [
@@ -997,20 +1012,20 @@ const WIKI_TECHNIQUES = [
 ];
 
 const WIKI_REGLEMENTATION = [
-  { sp:'Bar européen', emo:'🐟', sz:'42 cm', qt:'3/jour · No-kill fév–mars', alert:true },
-  { sp:'Maquereau', emo:'🐡', sz:'20 cm', qt:'20/jour' },
-  { sp:'Lieu jaune', emo:'🟡', sz:'30 cm', qt:'2/jour · Fermé jan–avr', alert:true },
-  { sp:'Cabillaud', emo:'🎣', sz:'35 cm', qt:'20/jour' },
-  { sp:'Merlan', emo:'🐠', sz:'23 cm', qt:'20/jour' },
-  { sp:'Sole', emo:'🫓', sz:'24 cm', qt:'10/jour' },
-  { sp:'Plie (Carrelet)', emo:'🪸', sz:'27 cm', qt:'20/jour' },
-  { sp:'Grondin rouge', emo:'🦞', sz:'20 cm', qt:'—' },
-  { sp:'Seiche', emo:'🦑', sz:'13 cm', qt:'20/jour' },
-  { sp:'Raie bouclée', emo:'🦈', sz:'45 cm', qt:'5/jour', alert:true },
-  { sp:'Dorade grise', emo:'⭕', sz:'23 cm', qt:'20/jour' },
-  { sp:'Congre', emo:'🐍', sz:'58 cm', qt:'5/jour' },
-  { sp:'Turbot', emo:'🪅', sz:'30 cm', qt:'5/jour' },
-  { sp:'Flet', emo:'🫓', sz:'23 cm', qt:'20/jour' },
+  { sp:'Bar européen', emo:'🐟', sz:'42 cm', qt:'3/jour (2026) · No-kill fév–mars', alert:true },
+  { sp:'Maquereau', emo:'🐡', sz:'30 cm', qt:'Pas de quota' },
+  { sp:'Lieu jaune', emo:'🟡', sz:'42 cm', qt:'3/jour · Fermé jan–avr', alert:true },
+  { sp:'Cabillaud', emo:'🎣', sz:'42 cm', qt:'Très restreint', alert:true },
+  { sp:'Merlan', emo:'🐠', sz:'27 cm', qt:'Pas de quota' },
+  { sp:'Sole', emo:'🫓', sz:'25 cm', qt:'Pas de quota' },
+  { sp:'Plie (Carrelet)', emo:'🪸', sz:'27 cm', qt:'Pas de quota' },
+  { sp:'Grondin rouge', emo:'🦞', sz:'~27 cm', qt:'Pas de quota' },
+  { sp:'Seiche', emo:'🦑', sz:'~25 cm', qt:'Pas de quota' },
+  { sp:'Raie bouclée', emo:'🦈', sz:'Pas de taille EU', qt:'Espèce surveillée', alert:true },
+  { sp:'Dorade grise', emo:'⭕', sz:'23 cm', qt:'Pas de quota' },
+  { sp:'Congre', emo:'🐍', sz:'60 cm', qt:'Pas de quota' },
+  { sp:'Turbot', emo:'🪅', sz:'30 cm', qt:'Pas de quota' },
+  { sp:'Flet', emo:'🫓', sz:'20 cm', qt:'Pas de quota' },
   { sp:'Anguille', emo:'〰️', sz:'—', qt:'⛔ Interdite', alert:true },
 ];
 
@@ -1108,7 +1123,7 @@ function _wikiHome() {
       }).join('')}
     </div>
     <div class="met-section" style="margin-top:14px">⚠️ RAPPEL RÉGLEMENTATION</div>
-    <div class="wiki-alert">🐟 Bar : No-kill obligatoire fév–mars · 3 bars/jour max avr–déc · 42cm minimum<br>🟡 Lieu jaune : Pêche FERMÉE janv–avr · 2 lieux/jour max · 30cm minimum</div>
+    <div class="wiki-alert">🐟 Bar : No-kill obligatoire fév–mars · 3 bars/jour max avr–déc · 42cm minimum<br>🟡 Lieu jaune : Pêche FERMÉE janv–avr · 3 lieux/jour max · 42cm minimum</div>
   </div>`;
 }
 

@@ -77,9 +77,10 @@
     .fab svg{width:20px;height:20px}
     .fab:active{transform:scale(.93)}
     #fab-me{bottom:12px;background:var(--sea);color:#fff;box-shadow:var(--sh-lg)}
-    #fab-filter{bottom:66px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);color:var(--text);border:1.5px solid rgba(28,0,254,.12);box-shadow:var(--sh)}
-    #fab-layers{bottom:120px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);color:var(--text);border:1.5px solid rgba(28,0,254,.12);box-shadow:var(--sh)}
-    #fab-compass{bottom:174px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);color:var(--text);border:1.5px solid rgba(28,0,254,.12);box-shadow:var(--sh)}
+    #fab-waypoint{bottom:66px;background:var(--gold);color:#fff;box-shadow:var(--sh-lg)}
+    #fab-filter{bottom:120px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);color:var(--text);border:1.5px solid rgba(28,0,254,.12);box-shadow:var(--sh)}
+    #fab-layers{bottom:174px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);color:var(--text);border:1.5px solid rgba(28,0,254,.12);box-shadow:var(--sh)}
+    #fab-compass{bottom:228px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);color:var(--text);border:1.5px solid rgba(28,0,254,.12);box-shadow:var(--sh)}
     #fab-compass.on{background:var(--sea);color:#fff;border-color:var(--sea)}
     #fab-layers.on{background:var(--sea);color:#fff;border-color:var(--sea)}
 
@@ -312,6 +313,7 @@
     .fish-wiki-hint{font-size:10px;color:var(--sea);margin-top:3px;font-weight:600}
     .wp-type-btn{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s}
     .wp-type-btn.on{background:var(--sea);color:#fff;border-color:var(--sea)}
+    .heading-label{background:var(--sea);color:#fff;font-size:11px;font-weight:800;padding:2px 6px;border-radius:8px;text-align:center;box-shadow:0 2px 8px rgba(28,0,254,.5);border:1.5px solid #fff;white-space:nowrap}
     .fish-card[onclick]{transition:transform .15s,box-shadow .15s}
     .fish-card[onclick]:hover{transform:scale(1.03);box-shadow:0 4px 16px rgba(28,0,254,.18)}
 
@@ -595,6 +597,12 @@
             <polygon points="12 22 9.5 14.5 12 16 14.5 14.5 12 22" fill="currentColor" opacity=".4" stroke="none"/>
           </svg>
         </button>
+        <button class="fab" id="fab-waypoint" onclick="addWaypointCenter()" title="Ajouter un point ici">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/>
+            <line x1="12" y1="8" x2="12" y2="14"/><line x1="9" y1="11" x2="15" y2="11"/>
+          </svg>
+        </button>
         <button class="fab" id="fab-me" onclick="centerMe()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
@@ -606,18 +614,17 @@
           <div>
             <div class="layer-section-title">🗺 Fond de carte</div>
             <div class="layer-btns">
-              <button class="layer-btn on" id="lb-peche" onclick="setBaseLayer('peche')">🎣 Style Pêche</button>
-              <button class="layer-btn" id="lb-esri-ocean" onclick="setBaseLayer('esri-ocean')">🌊 Esri Océan</button>
-              <button class="layer-btn" id="lb-osm" onclick="setBaseLayer('osm')">OSM</button>
+              <button class="layer-btn on" id="lb-marine" onclick="setBaseLayer('marine')">🌊 Carte Marine</button>
+              <button class="layer-btn" id="lb-satellite" onclick="setBaseLayer('satellite')">🛰 Satellite</button>
+              <button class="layer-btn" id="lb-osm" onclick="setBaseLayer('osm')">🗺 Plan</button>
             </div>
           </div>
           <div>
             <div class="layer-section-title">📡 Calques marins</div>
             <div class="layer-btns">
-              <button class="layer-btn on" id="lo-emodnet" onclick="toggleOverlay('emodnet')">🌈 Profondeurs EMODnet</button>
-              <button class="layer-btn on" id="lo-seamark" onclick="toggleOverlay('seamark')">⚓ Seamarkers</button>
-              <button class="layer-btn" id="lo-esri-ref" onclick="toggleOverlay('esri-ref')">🔢 Labels prof.</button>
-              <button class="layer-btn" id="lo-gebco" onclick="toggleOverlay('gebco')">📊 GEBCO</button>
+              <button class="layer-btn on" id="lo-seamark" onclick="toggleOverlay('seamark')">⚓ Balisage</button>
+              <button class="layer-btn" id="lo-depth" onclick="toggleOverlay('depth')">🌈 Profondeurs</button>
+              <button class="layer-btn" id="lo-esri-ref" onclick="toggleOverlay('esri-ref')">🔢 Sondes</button>
             </div>
           </div>
         </div>
@@ -899,7 +906,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<script src="data.js?v=4"></script>
-<script src="app.js?v=8"></script>
+<script src="data.js?v=10"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>
