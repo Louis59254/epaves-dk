@@ -17,11 +17,128 @@ document.addEventListener('DOMContentLoaded', () => {
   renderPeches();
   document.getElementById('sf-date').value = new Date().toISOString().split('T')[0];
   // Update dynamic counts
+  setTimeout(() => map.invalidateSize(), 100);
   document.querySelector('[data-q="all"]').textContent = `Toutes (${WRECKS.length})`;
   document.getElementById('mbadge').textContent = WRECKS.length;
   document.getElementById('h-count').textContent = WRECKS.length;
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 });
+
+// ── Map layers ───────────────────────────────────────────────────────────────
+const MAP_BASES = {
+  'osm': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OSM'
+  }),
+  'esri-ocean': L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 17, attribution: '© Esri, GEBCO, NOAA' }
+  ),
+  'esri-topo': L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 19, attribution: '© Esri' }
+  ),
+};
+const MAP_OVERLAYS = {
+  'seamark': L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
+    maxZoom: 18, opacity: 0.85
+  }),
+  'esri-ref': L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 17, opacity: 0.9, attribution: '© Esri' }
+  ),
+  'gebco': L.tileLayer.wms('https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv', {
+    layers: 'gebco_latest', format: 'image/png', transparent: true,
+    opacity: 0.5, attribution: '© GEBCO'
+  }),
+};
+let _activeBase = 'esri-ocean';
+const _activeOverlays = new Set(['seamark']);
+
+// ── Compass ──────────────────────────────────────────────────────────────────
+let _compassHeading = null;
+let _compassActive = false;
+
+function toggleCompass() {
+  if (_compassActive) { _stopCompass(); return; }
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then(s => { if (s === 'granted') _startCompass(); else toast('Permission boussole refusée'); })
+      .catch(() => toast('Boussole non disponible'));
+  } else { _startCompass(); }
+}
+
+function _startCompass() {
+  _compassActive = true;
+  document.getElementById('fab-compass').classList.add('on');
+  document.getElementById('compass-rose').style.display = 'flex';
+  window.addEventListener('deviceorientationabsolute', _onOrientation, true);
+  window.addEventListener('deviceorientation', _onOrientation, true);
+  toast('Boussole activée');
+}
+
+function _stopCompass() {
+  _compassActive = false;
+  _compassHeading = null;
+  window.removeEventListener('deviceorientationabsolute', _onOrientation, true);
+  window.removeEventListener('deviceorientation', _onOrientation, true);
+  document.getElementById('fab-compass').classList.remove('on');
+  document.getElementById('compass-rose').style.display = 'none';
+  if (userLat) updateMeDot();
+}
+
+function _onOrientation(e) {
+  let heading;
+  if (e.webkitCompassHeading != null) {
+    heading = e.webkitCompassHeading; // iOS: 0=N, clockwise, already magnetic
+  } else if (e.absolute && e.alpha != null) {
+    heading = (360 - e.alpha) % 360; // Android absolute
+  } else { return; }
+  _compassHeading = heading;
+  const rose = document.getElementById('compass-rose');
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
+  const dir = dirs[Math.round(heading / 22.5) % 16];
+  rose.querySelector('.compass-deg').textContent = Math.round(heading) + '°';
+  rose.querySelector('.compass-dir').textContent = dir;
+  rose.querySelector('.compass-arrow').style.transform = `rotate(${heading}deg)`;
+  if (userLat) updateMeDot();
+}
+
+// ── Layer switcher ────────────────────────────────────────────────────────────
+function toggleLayersPanel() {
+  const p = document.getElementById('map-layers');
+  const btn = document.getElementById('fab-layers');
+  const open = p.classList.toggle('open');
+  btn.classList.toggle('on', open);
+  document.getElementById('map-filters').classList.remove('open');
+}
+
+function setBaseLayer(name) {
+  if (!MAP_BASES[name]) return;
+  MAP_BASES[_activeBase].remove();
+  MAP_BASES[name].addTo(map);
+  // Re-add overlays on top
+  _activeOverlays.forEach(k => { if (MAP_OVERLAYS[k]) MAP_OVERLAYS[k].addTo(map); });
+  // Re-add cluster on top
+  map.removeLayer(cluster); map.addLayer(cluster);
+  _activeBase = name;
+  Object.keys(MAP_BASES).forEach(k =>
+    document.getElementById('lb-' + k)?.classList.toggle('on', k === name)
+  );
+}
+
+function toggleOverlay(name) {
+  if (!MAP_OVERLAYS[name]) return;
+  if (_activeOverlays.has(name)) {
+    MAP_OVERLAYS[name].remove();
+    _activeOverlays.delete(name);
+  } else {
+    MAP_OVERLAYS[name].addTo(map);
+    map.removeLayer(cluster); map.addLayer(cluster); // cluster stays on top
+    _activeOverlays.add(name);
+  }
+  document.getElementById('lo-' + name)?.classList.toggle('on', _activeOverlays.has(name));
+}
 
 // ── Map ─────────────────────────────────────────────────────────────────────
 function initMap() {
@@ -30,15 +147,10 @@ function initMap() {
     zoomControl: true, attributionControl: false
   });
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '© OSM'
-  }).addTo(map);
+  MAP_BASES['esri-ocean'].addTo(map);
+  MAP_OVERLAYS['seamark'].addTo(map);
 
-  L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
-    maxZoom: 18, opacity: 0.75
-  }).addTo(map);
-
-  L.control.attribution({ prefix: '© OSM · OpenSeaMap' }).addTo(map);
+  L.control.attribution({ prefix: '© Esri · OpenSeaMap' }).addTo(map);
 
   cluster = L.markerClusterGroup({
     maxClusterRadius: 40,
@@ -102,6 +214,8 @@ function mapSearch() {
 }
 
 function toggleMapF() {
+  document.getElementById('map-layers').classList.remove('open');
+  document.getElementById('fab-layers').classList.remove('on');
   document.getElementById('map-filters').classList.toggle('open');
 }
 
@@ -168,9 +282,18 @@ function stopGPS() {
 }
 
 function updateMeDot() {
-  const ico = L.divIcon({ className: '', html: '<div class="medot" style="background:#1c00fe;border:3px solid #fff;box-shadow:0 0 0 5px rgba(28,0,254,.25)"></div>', iconSize: [16,16], iconAnchor: [8,8] });
-  if (userMarker) userMarker.setLatLng([userLat, userLng]);
-  else { userMarker = L.marker([userLat, userLng], { icon: ico, zIndexOffset: 9999 }).addTo(map); userMarker.bindPopup('<b>Vous êtes ici</b>'); }
+  let icoHtml, sz;
+  if (_compassActive && _compassHeading != null) {
+    const h = _compassHeading;
+    sz = 32;
+    icoHtml = `<div class="medot-arrow"><svg viewBox="0 0 32 32" style="transform:rotate(${h}deg)"><circle cx="16" cy="16" r="15" fill="rgba(28,0,254,.15)" stroke="#1c00fe" stroke-width="1.5"/><polygon points="16,3 20,20 16,17 12,20" fill="#1c00fe"/><polygon points="16,29 12,16 16,19 20,16" fill="#1c00fe" opacity=".35"/></svg></div>`;
+  } else {
+    sz = 16;
+    icoHtml = '<div style="width:16px;height:16px;border-radius:50%;background:#1c00fe;border:3px solid #fff;box-shadow:0 0 0 5px rgba(28,0,254,.25)"></div>';
+  }
+  const ico = L.divIcon({ className: '', html: icoHtml, iconSize: [sz, sz], iconAnchor: [sz/2, sz/2] });
+  if (userMarker) { userMarker.setLatLng([userLat, userLng]); userMarker.setIcon(ico); }
+  else { userMarker = L.marker([userLat, userLng], { icon: ico, zIndexOffset: 9999 }).addTo(map); }
   if (userCircle) userCircle.setLatLng([userLat, userLng]);
   else userCircle = L.circle([userLat, userLng], { radius: 300, color: '#1c00fe', fillColor: '#1c00fe', fillOpacity: 0.08, weight: 1 }).addTo(map);
 }
@@ -200,7 +323,7 @@ function showP(id) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('on'));
   document.getElementById('p-' + id).classList.add('on');
   document.getElementById('nt-' + id).classList.add('on');
-  if (id === 'carte' && carteView === 'map') setTimeout(() => map.invalidateSize(), 60);
+  if (id === 'carte' && carteView === 'map') { setTimeout(() => map.invalidateSize(), 60); setTimeout(() => map.invalidateSize(), 300); }
   if (id === 'spots') renderSpots();
   if (id === 'peches') renderPeches();
   if (id === 'meteo') loadMeteo();

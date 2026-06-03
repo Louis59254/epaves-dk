@@ -78,6 +78,28 @@
     .fab:active{transform:scale(.93)}
     #fab-me{bottom:12px;background:var(--sea);color:#fff;box-shadow:var(--sh-lg)}
     #fab-filter{bottom:66px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);color:var(--text);border:1.5px solid rgba(28,0,254,.12);box-shadow:var(--sh)}
+    #fab-layers{bottom:120px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);color:var(--text);border:1.5px solid rgba(28,0,254,.12);box-shadow:var(--sh)}
+    #fab-compass{bottom:174px;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);color:var(--text);border:1.5px solid rgba(28,0,254,.12);box-shadow:var(--sh)}
+    #fab-compass.on{background:var(--sea);color:#fff;border-color:var(--sea)}
+    #fab-layers.on{background:var(--sea);color:#fff;border-color:var(--sea)}
+
+    /* Layers panel */
+    #map-layers{bottom:176px;right:12px;left:12px;padding:14px 16px;display:none;flex-direction:column;gap:12px}
+    #map-layers.open{display:flex}
+    .layer-section-title{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);font-weight:700;margin-bottom:4px}
+    .layer-btns{display:flex;gap:6px;flex-wrap:wrap}
+    .layer-btn{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:6px 13px;font-size:12px;cursor:pointer;color:var(--text2);font-weight:600;transition:all .15s;white-space:nowrap}
+    .layer-btn.on{background:var(--sea);color:#fff;border-color:var(--sea)}
+
+    /* Compass rose */
+    #compass-rose{position:absolute;bottom:16px;left:16px;z-index:500;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-radius:50%;width:64px;height:64px;display:none;flex-direction:column;align-items:center;justify-content:center;box-shadow:var(--sh);border:1.5px solid rgba(28,0,254,.12)}
+    .compass-arrow{font-size:22px;line-height:1;transition:transform .2s}
+    .compass-deg{font-size:10px;font-weight:800;color:var(--sea);margin-top:1px}
+    .compass-dir{font-size:9px;color:var(--text2);font-weight:600}
+
+    /* Arrow marker */
+    .medot-arrow{width:28px;height:28px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 2px 6px rgba(28,0,254,.6))}
+    .medot-arrow svg{width:28px;height:28px}
     #map-filters{bottom:120px;right:12px;left:12px;padding:14px 16px;display:none;flex-direction:column;gap:10px}
     #map-filters.open{display:flex}
     #map-filters h4{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);font-weight:700}
@@ -557,11 +579,52 @@
             <line x1="11" y1="18" x2="13" y2="18"/>
           </svg>
         </button>
+        <button class="fab" id="fab-layers" onclick="toggleLayersPanel()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+            <polyline points="2 17 12 22 22 17"/>
+            <polyline points="2 12 12 17 22 12"/>
+          </svg>
+        </button>
+        <button class="fab" id="fab-compass" onclick="toggleCompass()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="12 2 14.5 9.5 12 8 9.5 9.5 12 2" fill="currentColor" stroke="none"/>
+            <polygon points="12 22 9.5 14.5 12 16 14.5 14.5 12 22" fill="currentColor" opacity=".4" stroke="none"/>
+          </svg>
+        </button>
         <button class="fab" id="fab-me" onclick="centerMe()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/>
           </svg>
         </button>
+
+        <!-- Layers panel -->
+        <div class="map-ov" id="map-layers">
+          <div>
+            <div class="layer-section-title">🗺 Fond de carte</div>
+            <div class="layer-btns">
+              <button class="layer-btn" id="lb-osm" onclick="setBaseLayer('osm')">OSM Standard</button>
+              <button class="layer-btn on" id="lb-esri-ocean" onclick="setBaseLayer('esri-ocean')">🌊 Esri Océan</button>
+              <button class="layer-btn" id="lb-esri-topo" onclick="setBaseLayer('esri-topo')">Esri Topo</button>
+            </div>
+          </div>
+          <div>
+            <div class="layer-section-title">📡 Calques marins</div>
+            <div class="layer-btns">
+              <button class="layer-btn on" id="lo-seamark" onclick="toggleOverlay('seamark')">⚓ Seamarkers</button>
+              <button class="layer-btn" id="lo-esri-ref" onclick="toggleOverlay('esri-ref')">🔢 Profondeurs labels</button>
+              <button class="layer-btn" id="lo-gebco" onclick="toggleOverlay('gebco')">📊 GEBCO bathymétrie</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Compass rose -->
+        <div id="compass-rose">
+          <div class="compass-arrow">🧭</div>
+          <div class="compass-deg">—°</div>
+          <div class="compass-dir">—</div>
+        </div>
       </div>
 
       <!-- Vue LISTE -->
@@ -813,6 +876,6 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="data.js?v=4"></script>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>
