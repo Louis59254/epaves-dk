@@ -1360,41 +1360,50 @@ function toast(msg, dur = 2600) {
 }
 
 // ── MÉTÉO / MARÉES ────────────────────────────────────────────────────────────
+// Marées : niveau de la mer Open-Meteo Marine (modèle océanique, marées incluses),
+// converti au zéro hydrographique de Dunkerque par régression affine calibrée
+// sur les annuaires officiels : h_ZH = 1.07 × h_MSL + 3.70  (erreur ≈ ±0.1 m)
+const TIDE_MSL_SLOPE  = 1.07;
+const TIDE_MSL_OFFSET = 3.70;
+const TIDE_TIME_SHIFT = 20 * 60000; // biais de phase du modèle à Dunkerque (~20 min)
 
-// Harmoniques de marée pour Dunkerque (source SHOM)
-const TIDE_REF = Date.UTC(1900, 0, 1, 0, 0, 0);
-// Constantes harmoniques calibrées empiriquement pour Dunkerque
-// Formule: h = Z0 + Σ A·cos(σt − G) avec t en heures depuis 1900-01-01 UTC
-const DK_CONST = [
-  { A: 2.10, s: 28.9841, G:  91.2 }, // M2 — calibré sur marées avril 2026
-  { A: 0.99, s: 30.0000, G: 182.0 }, // S2
-  { A: 0.20, s: 28.4397, G: 344.8 }, // N2
-  { A: 0.16, s: 30.0821, G: 170.3 }, // K2
-  { A: 0.17, s: 57.9682, G:  66.3 }, // M4
-  { A: 0.09, s: 58.9841, G: 111.0 }, // MS4
-  { A: 0.07, s: 15.0411, G: 305.7 }, // K1
-  { A: 0.06, s: 13.9430, G: 264.9 }, // O1
-];
-const DK_MSL = 3.80;
+// Série horaire { t0: ms du 1er point, step: ms, h: [hauteurs ZH] }
+let _tideSeries = null;
 
-function tideH(ms) {
-  const h = (ms - TIDE_REF) / 3600000;
-  return DK_MSL + DK_CONST.reduce((s, c) => s + c.A * Math.cos((c.s * h - c.G) * Math.PI / 180), 0);
+function _tideIdx(ms) {
+  if (!_tideSeries) return -1;
+  const i = (ms - _tideSeries.t0) / _tideSeries.step;
+  return (i < 1 || i > _tideSeries.h.length - 3) ? -1 : i;
 }
 
+// Hauteur d'eau interpolée (Catmull-Rom sur la série horaire)
+function tideH(ms) {
+  const fi = _tideIdx(ms);
+  if (fi < 0) return null;
+  const i = Math.floor(fi), u = fi - i;
+  const h = _tideSeries.h;
+  const p0 = h[i - 1], p1 = h[i], p2 = h[i + 1], p3 = h[i + 2];
+  return 0.5 * ((2 * p1) + (-p0 + p2) * u + (2*p0 - 5*p1 + 4*p2 - p3) * u*u + (-p0 + 3*p1 - 3*p2 + p3) * u*u*u);
+}
+
+// Extrema PM/BM : détection sur points horaires + affinage parabolique (≈ ±5 min)
 function computeTideExtrema(startMs, durationH) {
-  const step = 5 * 60 * 1000; // 5 min
-  const pts = [];
-  for (let t = startMs; t <= startMs + durationH * 3600000; t += step) {
-    pts.push({ t, h: tideH(t) });
+  if (!_tideSeries) return [];
+  const { t0, step, h } = _tideSeries;
+  const i0 = Math.max(1, Math.ceil((startMs - t0) / step));
+  const i1 = Math.min(h.length - 2, Math.floor((startMs + durationH * 3600000 - t0) / step));
+  const out = [];
+  for (let i = i0; i <= i1; i++) {
+    const a = h[i - 1], b = h[i], c = h[i + 1];
+    const isMax = b >= a && b > c, isMin = b <= a && b < c;
+    if (!isMax && !isMin) continue;
+    const denom = a - 2 * b + c;
+    const du = denom ? 0.5 * (a - c) / denom : 0;       // sommet de parabole
+    const t = t0 + (i + Math.max(-1, Math.min(1, du))) * step;
+    const hh = b - 0.25 * (a - c) * du;
+    out.push({ t, h: hh, type: isMax ? 'PM' : 'BM' });
   }
-  const extrema = [];
-  for (let i = 1; i < pts.length - 1; i++) {
-    const p = pts[i - 1].h, c = pts[i].h, n = pts[i + 1].h;
-    if (c > p && c > n) extrema.push({ t: pts[i].t, h: c, type: 'PM' });
-    if (c < p && c < n) extrema.push({ t: pts[i].t, h: c, type: 'BM' });
-  }
-  return extrema;
+  return out;
 }
 
 function windDir(deg) {
@@ -1428,8 +1437,9 @@ function wmoDesc(code) {
 }
 
 function fishingCond(windKt, waveM) {
-  if (windKt < 15 && waveM < 0.5) return { cls: 'good', label: 'Excellentes conditions', sub: '✅ Parfait pour sortir !' };
-  if (windKt < 22 && waveM < 1.0) return { cls: 'ok',   label: 'Conditions acceptables', sub: '⚠️ Sortie possible avec précautions' };
+  if (windKt < 12 && waveM <= 0.6) return { cls: 'good', label: 'Excellentes conditions', sub: '✅ Parfait pour sortir !' };
+  if (windKt < 18 && waveM <= 1.2) return { cls: 'ok',   label: 'Conditions correctes', sub: '⚠️ Sortie possible avec précautions' };
+  if (windKt < 25 && waveM <= 1.8) return { cls: 'ok',   label: 'Conditions limites', sub: '⚠️ Pêcheurs expérimentés uniquement, rester près de la côte' };
   return { cls: 'bad', label: 'Mer agitée', sub: '🚫 Conditions difficiles — rester à quai' };
 }
 
@@ -1449,21 +1459,62 @@ let _meteoLoaded = false;
 let _hourlyWx = null;
 let _hourlyMarine = null;
 
-function tideCoef(h, type) {
-  const range = type === 'PM' ? h - DK_MSL : DK_MSL - h;
-  return Math.max(20, Math.min(120, Math.round((range / (DK_CONST[0].A + DK_CONST[1].A)) * 120)));
+// Coefficient de marée approx. depuis le marnage du jour
+// (marnage vive-eau moyenne Dunkerque ≈ 5.9 m ↔ coefficient 95)
+function tideCoefFromRange(marnage) {
+  return Math.max(20, Math.min(120, Math.round(marnage / 5.9 * 95)));
 }
 
-async function loadMeteo() {
-  if (_meteoLoaded) return;
+const METEO_CACHE_KEY = 'maz-meteo-v2';
+const METEO_TTL = 15 * 60 * 1000; // 15 min
+
+function _readMeteoCache() {
+  try { return JSON.parse(localStorage.getItem(METEO_CACHE_KEY)); } catch { return null; }
+}
+
+async function _fetchMeteo() {
+  const [wx, marine, tide] = await Promise.all([
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=51.035&longitude=2.377&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl&hourly=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation_probability&daily=weather_code,temperature_2m_max,wind_speed_10m_max,wind_gusts_10m_max&wind_speed_unit=kn&timezone=Europe%2FParis&forecast_days=7').then(r => r.json()),
+    fetch('https://marine-api.open-meteo.com/v1/marine?latitude=51.06&longitude=2.35&current=wave_height,wave_direction,wave_period,sea_surface_temperature&hourly=wave_height,wave_period,wave_direction&forecast_days=7&timezone=Europe%2FParis').then(r => r.json()),
+    fetch('https://marine-api.open-meteo.com/v1/marine?latitude=51.048&longitude=2.367&hourly=sea_level_height_msl&timeformat=unixtime&forecast_days=8&past_days=1&timezone=Europe%2FParis').then(r => r.json()),
+  ]);
+  if (!wx?.current || !tide?.hourly?.sea_level_height_msl) throw new Error('Réponse API incomplète');
+  return { at: Date.now(), wx, marine, tide };
+}
+
+function _buildTideSeries(tide) {
+  const t = tide.hourly.time, v = tide.hourly.sea_level_height_msl;
+  _tideSeries = {
+    t0: t[0] * 1000 + TIDE_TIME_SHIFT,
+    step: (t[1] - t[0]) * 1000,
+    h: v.map(x => x == null ? null : Math.max(0, TIDE_MSL_SLOPE * x + TIDE_MSL_OFFSET)),
+  };
+}
+
+async function loadMeteo(force = false) {
+  if (_meteoLoaded && !force) return;
   const el = document.getElementById('met-scroll');
 
-  try {
-    const [wx, marine] = await Promise.all([
-      fetch('https://api.open-meteo.com/v1/forecast?latitude=51.03&longitude=2.37&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m&daily=weather_code,temperature_2m_max,wind_speed_10m_max&wind_speed_unit=kn&timezone=Europe%2FParis&forecast_days=5').then(r => r.json()),
-      fetch('https://marine-api.open-meteo.com/v1/marine?latitude=51.0&longitude=2.5&current=wave_height,wave_direction,wave_period&hourly=wave_height,wave_period,wave_direction&forecast_days=5&timezone=Europe%2FParis').then(r => r.json()),
-    ]);
+  // Cache frais → rendu immédiat sans réseau
+  let data = _readMeteoCache();
+  let stale = false;
+  if (force || !data || Date.now() - data.at > METEO_TTL) {
+    try {
+      data = await _fetchMeteo();
+      localStorage.setItem(METEO_CACHE_KEY, JSON.stringify(data));
+    } catch (err) {
+      if (!data) {
+        el.innerHTML = `<div class="met-loading">❌ Impossible de charger la météo.<br><small>Vérifiez votre connexion.</small><br>
+          <button class="g-btn" style="margin-top:12px" onclick="loadMeteo(true)">Réessayer</button></div>`;
+        return;
+      }
+      stale = true; // réseau KO → on affiche le cache avec bandeau
+    }
+  }
 
+  try {
+    const { wx, marine, tide } = data;
+    _buildTideSeries(tide);
     _hourlyWx     = wx.hourly;
     _hourlyMarine = marine.hourly;
 
@@ -1473,9 +1524,9 @@ async function loadMeteo() {
     const [ico, desc] = wmoDesc(cur.weather_code);
     const cond  = fishingCond(cur.wind_speed_10m, waveH);
 
-    // Strip 14 jours
+    // Strip marées : 8 jours (couverture du modèle océanique)
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-    const dateChips = Array.from({length:14}, (_,i) => {
+    const dateChips = Array.from({length:8}, (_,i) => {
       const d = new Date(todayStart.getTime() + i*86400000);
       const day = d.toLocaleDateString('fr-FR',{weekday:'short'});
       const num = d.getDate();
@@ -1500,32 +1551,35 @@ async function loadMeteo() {
       </div>`;
     }).join('');
 
+    const seaT = marine.current?.sea_surface_temperature;
+    const ageMin = Math.round((Date.now() - data.at) / 60000);
     el.innerHTML = `
+      ${stale ? `<div class="wiki-alert" style="margin:10px 12px 0">📡 Hors ligne — données d'il y a ${ageMin < 60 ? ageMin + ' min' : Math.round(ageMin/60) + ' h'} <button style="float:right;border:none;background:none;color:var(--sea);font-weight:700;cursor:pointer" onclick="loadMeteo(true)">↻ Réessayer</button></div>` : ''}
       <div class="met-section">🌊 Conditions actuelles</div>
       <div class="met-now-grid">
         <div class="met-card">
           <div class="met-card-ico">${ico}</div>
           <div class="met-card-v">${Math.round(cur.temperature_2m)}°C</div>
           <div class="met-card-l">Météo</div>
-          <div class="met-card-sub">${desc}</div>
+          <div class="met-card-sub">${desc} · ressenti ${Math.round(cur.apparent_temperature)}°</div>
         </div>
         <div class="met-card">
           <div class="met-card-ico">💨</div>
           <div class="met-card-v">${Math.round(cur.wind_speed_10m)} kt</div>
           <div class="met-card-l">Vent · ${windDir(cur.wind_direction_10m)}</div>
-          <div class="met-card-sub">${beaufort(cur.wind_speed_10m)}</div>
+          <div class="met-card-sub">${beaufort(cur.wind_speed_10m)} · rafales ${Math.round(cur.wind_gusts_10m)} kt</div>
         </div>
         <div class="met-card">
           <div class="met-card-ico">🌊</div>
           <div class="met-card-v">${waveH.toFixed(1)} m</div>
           <div class="met-card-l">Vagues</div>
-          <div class="met-card-sub">Dir. ${windDir(waveDir)} · ${(marine.current?.wave_period??0).toFixed(0)}s</div>
+          <div class="met-card-sub">Dir. ${windDir(waveDir)} · ${(marine.current?.wave_period??0).toFixed(0)}s${seaT != null ? ` · mer ${Math.round(seaT)}°` : ''}</div>
         </div>
         <div class="met-card">
-          <div class="met-card-ico">💨</div>
-          <div class="met-card-v">${Math.round(cur.wind_gusts_10m)} kt</div>
-          <div class="met-card-l">Rafales max</div>
-          <div class="met-card-sub">Prévues aujourd'hui</div>
+          <div class="met-card-ico">🧭</div>
+          <div class="met-card-v">${Math.round(cur.pressure_msl)}</div>
+          <div class="met-card-l">Pression hPa</div>
+          <div class="met-card-sub">${cur.pressure_msl >= 1015 ? 'Anticyclonique' : cur.pressure_msl >= 1005 ? 'Variable' : 'Dépressionnaire'}</div>
         </div>
       </div>
       <div class="met-cond">
@@ -1543,15 +1597,17 @@ async function loadMeteo() {
       <div class="met-section">🌊 Marées — Dunkerque</div>
       <div class="tide-date-strip">${dateChips}</div>
       <div id="tide-day-detail"></div>
-      <div style="font-size:10px;color:var(--muted);margin:4px 2px 16px">Prédiction harmonique SHOM — indicatif</div>
+      <div style="font-size:10px;color:var(--muted);margin:4px 2px 16px">Marées : modèle océanique Open-Meteo, calé sur le zéro hydrographique de Dunkerque — indicatif, ne remplace pas l'annuaire officiel SHOM · Actualisé ${new Date(data.at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</div>
     `;
 
     renderTideDayDetail(todayStart.getTime());
     _meteoLoaded = true;
-    setTimeout(() => { _meteoLoaded = false; }, 30 * 60 * 1000);
+    setTimeout(() => { _meteoLoaded = false; }, METEO_TTL);
 
   } catch(err) {
-    el.innerHTML = `<div class="met-loading">❌ Impossible de charger la météo.<br><small>Vérifiez votre connexion.</small></div>`;
+    console.error('loadMeteo:', err);
+    el.innerHTML = `<div class="met-loading">❌ Erreur d'affichage météo.<br>
+      <button class="g-btn" style="margin-top:12px" onclick="localStorage.removeItem(METEO_CACHE_KEY);loadMeteo(true)">Réessayer</button></div>`;
   }
 }
 
@@ -1565,8 +1621,10 @@ function renderTideChart(dateMs) {
   const W = 320, H = 100, PX = 12, PY = 8;
   const pts = [];
   for (let i = 0; i <= 96; i++) {
-    pts.push({ t: dateMs + i * 15 * 60000, h: tideH(dateMs + i * 15 * 60000) });
+    const t = dateMs + i * 15 * 60000, h = tideH(t);
+    if (h != null) pts.push({ t, h });
   }
+  if (pts.length < 20) return '<div class="g-empty">Marées non disponibles pour cette date</div>';
   const minH = Math.min(...pts.map(p => p.h));
   const maxH = Math.max(...pts.map(p => p.h));
   const sx = t  => PX + ((t - dateMs) / 86400000) * (W - 2*PX);
@@ -1617,15 +1675,20 @@ function renderTideDayDetail(dateMs) {
 
   const dateLabel = new Date(dateMs).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
 
+  // Coefficient du jour depuis le marnage (PM max − BM min)
+  const pms = extrema.filter(e => e.type === 'PM'), bms = extrema.filter(e => e.type === 'BM');
+  const coef = (pms.length && bms.length)
+    ? tideCoefFromRange(Math.max(...pms.map(e => e.h)) - Math.min(...bms.map(e => e.h)))
+    : null;
+
   const rows = extrema.map(e => {
     const isPM = e.type === 'PM';
-    const coef = tideCoef(e.h, e.type);
     return `<div class="tide-row">
       <div class="tide-ico">${isPM ? '🔼' : '🔽'}</div>
       <div class="tide-time">${fmtTime(e.t)}</div>
       <div style="flex:1">
         <div class="tide-type ${isPM?'pm':'bm'}">${isPM?'Pleine mer':'Basse mer'}</div>
-        ${isPM ? `<div class="tide-coef">Coefficient ~${coef}</div>` : ''}
+        ${isPM && coef ? `<div class="tide-coef">Coefficient ~${coef}</div>` : ''}
       </div>
       <div class="tide-h">${e.h.toFixed(1)} m</div>
     </div>`;
