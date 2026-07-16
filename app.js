@@ -465,6 +465,7 @@ function showP(id) {
   if (id === 'peches') renderPeches();
   if (id === 'meteo') loadMeteo();
   if (id === 'info') renderInfo();
+  if (id === 'gestion') renderGestion();
   document.getElementById('map-filters').classList.remove('open');
 }
 

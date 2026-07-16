@@ -314,6 +314,45 @@
     .wp-type-btn{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s}
     .wp-type-btn.on{background:var(--sea);color:#fff;border-color:var(--sea)}
     .heading-label{background:var(--sea);color:#fff;font-size:11px;font-weight:800;padding:2px 6px;border-radius:8px;text-align:center;box-shadow:0 2px 8px rgba(28,0,254,.5);border:1.5px solid #fff;white-space:nowrap}
+
+    /* ── GESTION ─────────────────────────────────────────── */
+    #p-gestion{background:var(--bg)}
+    #gestion-root{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:20px}
+    .g-topbar{position:sticky;top:0;z-index:10;background:var(--surf);border-bottom:1px solid rgba(28,0,254,.07);padding:8px 14px;display:flex;align-items:center;justify-content:space-between}
+    .g-tabs{display:flex;gap:4px}
+    .g-tab{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:12px;padding:7px 14px;font-size:16px;cursor:pointer;transition:all .15s}
+    .g-tab.on{background:var(--sea);border-color:var(--sea)}
+    .g-body{padding:12px 14px}
+    .g-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}
+    .g-stat{background:var(--surf);border-radius:var(--r);padding:13px;box-shadow:var(--sh)}
+    .g-stat-v{font-size:19px;font-weight:900;color:var(--sea)}
+    .g-stat-l{font-size:10.5px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+    .g-card{background:var(--surf);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;box-shadow:var(--sh);font-size:14px}
+    .g-empty{color:var(--muted);font-size:13px;text-align:center;padding:16px}
+    .g-btn{background:var(--sea);border:none;color:#fff;border-radius:var(--r);padding:12px 16px;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px}
+    .g-btn.ghost{background:var(--surf2);color:var(--text2)}
+    .g-btn.danger{background:var(--red)}
+    .g-btn.danger.ghost{background:transparent;color:var(--red);border:1.5px solid var(--red)}
+    .g-btn.gold{background:linear-gradient(135deg,var(--gold),#f97316)}
+    .g-user-btn{background:var(--surf);border:2px solid var(--surf3);border-radius:var(--rb);padding:14px 22px;font-size:14px;font-weight:700;cursor:pointer;color:var(--text);transition:all .15s}
+    .g-user-btn.on{border-color:var(--sea);background:var(--sea-bg)}
+    .g-lbl{display:block;font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.05em;margin:8px 0 4px;text-transform:uppercase}
+    .g-inp{width:100%;background:var(--surf2);border:1.5px solid var(--surf3);border-radius:var(--r);padding:10px 12px;font-size:14px;color:var(--text);outline:none;margin-bottom:2px}
+    .g-inp:focus{border-color:var(--sea-md)}
+    .g-month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .g-month-nav button{background:var(--surf);border:1.5px solid var(--surf3);border-radius:12px;width:38px;height:38px;font-size:20px;cursor:pointer;color:var(--sea)}
+    .g-cal-head{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:10px;font-weight:700;color:var(--muted);margin-bottom:4px}
+    .g-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+    .g-day{aspect-ratio:1;background:var(--surf);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid transparent}
+    .g-day.today{border-color:var(--sea);color:var(--sea);font-weight:900}
+    .g-day.has{background:var(--sea-bg)}
+    .g-dots{display:flex;gap:2px;margin-top:2px;height:5px}
+    .g-dot{width:5px;height:5px;border-radius:50%}
+    .g-slot-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:4px}
+    .g-slot{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:12px;padding:8px 4px;font-size:11px;font-weight:700;cursor:pointer;text-align:center;color:var(--text2);line-height:1.5}
+    .g-slot.on{background:var(--sea);color:#fff;border-color:var(--sea)}
+    .g-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center}
+    .g-modal{background:var(--surf);border-radius:20px 20px 0 0;padding:18px 16px 30px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto}
     .fish-card[onclick]{transition:transform .15s,box-shadow .15s}
     .fish-card[onclick]:hover{transform:scale(1.03);box-shadow:0 4px 16px rgba(28,0,254,.18)}
 
@@ -670,6 +709,11 @@
       </div>
     </div>
 
+    <!-- GESTION locative -->
+    <div class="panel" id="p-gestion">
+      <div id="gestion-root"></div>
+    </div>
+
     <!-- INFO (wiki pêche) -->
     <div class="panel" id="p-info">
       <div class="info-scroll" id="info-scroll">
@@ -748,6 +792,15 @@
         <path d="M5 5c2-2 5-3 7-3s5 1 7 3"/>
       </svg>
       Pêches
+      <div class="tab-dot"></div>
+    </button>
+    <button class="tab-btn" id="nt-gestion" onclick="showP('gestion')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
+      </svg>
+      Gestion
       <div class="tab-dot"></div>
     </button>
     <button class="tab-btn" id="nt-meteo" onclick="showP('meteo')">
@@ -906,7 +959,9 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<script src="data.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<div id="g-modal"></div>
+<script src="data.js?v=11"></script>
+<script src="app.js?v=11"></script>
+<script src="gestion.js?v=11"></script>
 </body>
 </html>
