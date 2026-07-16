@@ -27,7 +27,7 @@ function defaultDb() {
   };
   return {
     secret,
-    users: [mkUser('u1', 'Louis'), mkUser('u2', 'Antoine')],
+    users: [mkUser('u1', 'Louis'), mkUser('u2', 'Paul-Antoine')],
     clients: [],
     bookings: [],
     settings: {
