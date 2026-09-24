@@ -1,7 +1,7 @@
 // Cache uniquement les tuiles carte — jamais les fichiers app
 // Cache d'abord (carte consultable hors réseau en mer), réseau sinon ; taille plafonnée
-const CACHE = 'maz-tiles-v2';
-const MAX_ENTRIES = 3000;
+const CACHE = 'maz-tiles-v3';
+const MAX_ENTRIES = 5000;
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -24,8 +24,9 @@ const TILE_HOSTS = [
 
 function isTile(url) {
   if (TILE_HOSTS.some(h => url.includes(h))) return true;
-  // WMS EMODnet : GetMap uniquement (GetFeatureInfo = profondeur au clic, toujours en direct)
-  return url.includes('emodnet-bathymetry.eu') && /REQUEST=GetMap/i.test(url);
+  // WMS bathymétrie (EMODnet, SHOM) : GetMap uniquement
+  return (url.includes('emodnet-bathymetry.eu') || url.includes('services.data.shom.fr'))
+    && /REQUEST=GetMap/i.test(url);
 }
 
 async function trim(cache) {

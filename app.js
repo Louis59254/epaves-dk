@@ -26,77 +26,16 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Map layers ───────────────────────────────────────────────────────────────
-// Carte marine « type Navionics » construite à partir de données officielles :
-//   1. Bathymétrie EMODnet (maille ~115 m) colorée avec une palette calée sur 0–60 m
-//   2. Isobathes 2/5/10/15/20/30 m calculées côté serveur (GeoServer ras:Contour), étiquetées
-//   3. Terre CARTO dont l'eau est rendue transparente (masque le bruit des polders)
-//   4. Noms de lieux CARTO + balisage OpenSeaMap
-const EMODNET_WMS = 'https://ows.emodnet-bathymetry.eu/wms';
-
-// Palette profondeur (m) — chaud = peu profond, comme les cartes de pêche
-const DEPTH_RAMP = [
-  [   3, '#c9b77a'], // estran découvrant
-  [   0, '#d94a3a'],
-  [  -2, '#ee6a3b'],
-  [  -4, '#f59a42'],
-  [  -6, '#f8c852'],
-  [  -8, '#e3e063'],
-  [ -10, '#b2da73'],
-  [ -13, '#78cc92'],
-  [ -16, '#4fbcb2'],
-  [ -20, '#3ea5cf'],
-  [ -25, '#3a86c9'],
-  [ -30, '#3c67b6'],
-  [ -40, '#394d9e'],
-  [ -60, '#2e3a7c'],
-];
-
-function _sldDepthColors() {
-  const entries = DEPTH_RAMP.slice().reverse()
-    .map(([q, c]) => `<ColorMapEntry color="${c}" quantity="${q}"/>`).join('');
-  return `<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc"><NamedLayer><Name>emodnet:mean</Name><UserStyle><FeatureTypeStyle><Rule><RasterSymbolizer><ColorMap>${entries}<ColorMapEntry color="#c9b77a" quantity="3.01" opacity="0"/></ColorMap></RasterSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
-}
-
-function _sldIsobaths() {
-  const levels = [-2, -5, -10, -15, -20, -30].map(l => `<ogc:Literal>${l}</ogc:Literal>`).join('');
-  const p = (name, ...vals) => `<ogc:Function name="parameter"><ogc:Literal>${name}</ogc:Literal>${vals.join('')}</ogc:Function>`;
-  return `<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc"><NamedLayer><Name>emodnet:mean</Name><UserStyle><FeatureTypeStyle><Transformation><ogc:Function name="ras:Contour">${p('data')}${p('levels', levels)}${p('smooth', '<ogc:Literal>true</ogc:Literal>')}${p('simplify', '<ogc:Literal>true</ogc:Literal>')}</ogc:Function></Transformation><Rule><LineSymbolizer><Stroke><CssParameter name="stroke">#1d2a44</CssParameter><CssParameter name="stroke-width">0.8</CssParameter><CssParameter name="stroke-opacity">0.55</CssParameter></Stroke></LineSymbolizer><TextSymbolizer><Label><ogc:Function name="numberFormat"><ogc:Literal>0</ogc:Literal><ogc:Function name="abs"><ogc:PropertyName>value</ogc:PropertyName></ogc:Function></ogc:Function></Label><Font><CssParameter name="font-family">SansSerif</CssParameter><CssParameter name="font-size">10</CssParameter><CssParameter name="font-weight">bold</CssParameter></Font><LabelPlacement><LinePlacement/></LabelPlacement><Halo><Radius>1.5</Radius><Fill><CssParameter name="fill">#ffffff</CssParameter></Fill></Halo><Fill><CssParameter name="fill">#1d2a44</CssParameter></Fill><VendorOption name="followLine">true</VendorOption><VendorOption name="repeat">220</VendorOption><VendorOption name="maxAngleDelta">30</VendorOption></TextSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
-}
-
-// Tuiles OSM dont les pixels « eau » deviennent transparents → seule la terre reste
-// (masque le bruit bathymétrique des polders, garde villes, routes et noms)
-const LandMaskLayer = L.GridLayer.extend({
-  createTile(coords, done) {
-    const tile = document.createElement('canvas');
-    tile.width = tile.height = 256;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const ctx = tile.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(img, 0, 0);
-      const data = ctx.getImageData(0, 0, 256, 256), p = data.data;
-      for (let i = 0; i < p.length; i += 4) {
-        // Eau OSM = #aad3df ; fondu progressif sur les bords anticrénelés
-        const d = Math.abs(p[i] - 170) + Math.abs(p[i + 1] - 211) + Math.abs(p[i + 2] - 223);
-        if (d < 16) p[i + 3] = 0;
-        else if (d < 44) p[i + 3] = Math.round((d - 16) / 28 * 255);
-      }
-      ctx.putImageData(data, 0, 0);
-      done(null, tile);
-    };
-    img.onerror = () => done(null, tile);
-    img.src = `https://tile.openstreetmap.org/${coords.z}/${coords.x}/${coords.y}.png`;
-    return tile;
-  },
+// Carte marine : profondeurs SHOM 20 m (EMODnet en secours) décodées et ombrées
+// dans le navigateur (bathy.js), terre OSM, balisage OpenSeaMap
+const DEPTH_LAYER = new DepthLayer({
+  pane: 'bathyPane', maxZoom: 18, maxNativeZoom: 15,
+  attribution: '© SHOM (MNT TANDEM 20 m) · © EMODnet',
 });
 
 const MAP_BASES = {
   'marine': L.layerGroup([
-    L.tileLayer.wms(EMODNET_WMS, {
-      pane: 'bathyPane', layers: 'emodnet:mean', sld_body: _sldDepthColors(), interpolations: 'bicubic',
-      format: 'image/png', transparent: true, tileSize: 512, zoomOffset: 0,
-      maxZoom: 18, maxNativeZoom: 14, attribution: '© EMODnet Bathymetry',
-    }),
+    DEPTH_LAYER,
     new LandMaskLayer({ pane: 'landPane', maxZoom: 19, maxNativeZoom: 19, attribution: '© OpenStreetMap' }),
   ]),
   // Satellite : voir les bancs de sable réels par eau claire
@@ -109,12 +48,7 @@ const MAP_BASES = {
   }),
 };
 const MAP_OVERLAYS = {
-  // Isobathes étiquetées
-  'isobaths': L.tileLayer.wms(EMODNET_WMS, {
-    pane: 'contourPane', layers: 'emodnet:mean', sld_body: _sldIsobaths(), interpolations: 'bicubic',
-    format: 'image/png', transparent: true, tileSize: 512,
-    maxZoom: 18, maxNativeZoom: 14, minZoom: 9,
-  }),
+  'isobaths': new IsobathToggle(DEPTH_LAYER),
   // Balisage maritime : bouées, phares, épaves, chenaux
   'seamark': L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
     pane: 'seamarkPane', maxZoom: 18,
@@ -123,18 +57,25 @@ const MAP_OVERLAYS = {
 let _activeBase = 'marine';
 const _activeOverlays = new Set(['isobaths', 'seamark']);
 
-// ── Profondeur au toucher (EMODnet GetFeatureInfo) ───────────────────────────
+// ── Profondeur au toucher ────────────────────────────────────────────────────
+// Lue d'abord dans les tuiles affichées (SHOM 20 m), sinon EMODnet GetFeatureInfo
 async function showDepthAt(latlng) {
-  const d = 0.0005;
-  const url = `${EMODNET_WMS}?SERVICE=WMS&REQUEST=GetFeatureInfo&VERSION=1.1.1&LAYERS=emodnet:mean&QUERY_LAYERS=emodnet:mean&INFO_FORMAT=application/json&SRS=EPSG:4326&BBOX=${latlng.lng - d},${latlng.lat - d},${latlng.lng + d},${latlng.lat + d}&WIDTH=3&HEIGHT=3&X=1&Y=1`;
   const popup = L.popup({ className: 'depth-popup', closeButton: false, autoPan: false })
-    .setLatLng(latlng).setContent('<div class="dp-v">…</div>').openOn(map);
-  try {
-    const r = await fetch(url).then(res => res.json());
-    const z = r.features?.[0]?.properties?.Depth;
+    .setLatLng(latlng).setContent('<div class="dp-v">…</div>');
+  const show = z => {
     if (z == null || z > 3) { map.closePopup(popup); return; }
     const txt = z > 0 ? `Découvre ~${z.toFixed(1)} m` : `${Math.abs(z).toFixed(1)} m`;
     popup.setContent(`<div class="dp-v">${txt}</div><div class="dp-l">Profondeur (zéro hydro.)</div>`);
+  };
+  const local = DEPTH_LAYER.depthAt(latlng);
+  if (local !== undefined) { popup.openOn(map); show(local); return; }
+
+  popup.openOn(map);
+  const d = 0.0005;
+  const url = `${EMODNET_WMS}?SERVICE=WMS&REQUEST=GetFeatureInfo&VERSION=1.1.1&LAYERS=emodnet:mean&QUERY_LAYERS=emodnet:mean&INFO_FORMAT=application/json&SRS=EPSG:4326&BBOX=${latlng.lng - d},${latlng.lat - d},${latlng.lng + d},${latlng.lat + d}&WIDTH=3&HEIGHT=3&X=1&Y=1`;
+  try {
+    const r = await fetch(url).then(res => res.json());
+    show(r.features?.[0]?.properties?.Depth);
   } catch {
     map.closePopup(popup);
   }
@@ -352,14 +293,14 @@ function initMap() {
   });
 
   // Ordre d'empilement : bathymétrie < isobathes < terre < noms < balisage
-  [['bathyPane', 210], ['contourPane', 220], ['landPane', 230], ['seamarkPane', 250]]
+  [['bathyPane', 210], ['landPane', 230], ['seamarkPane', 250]]
     .forEach(([name, z]) => { map.createPane(name).style.zIndex = z; });
-  ['landPane', 'seamarkPane', 'contourPane'].forEach(n => map.getPane(n).style.pointerEvents = 'none');
+  ['landPane', 'seamarkPane'].forEach(n => map.getPane(n).style.pointerEvents = 'none');
 
   MAP_BASES['marine'].addTo(map);
   _activeOverlays.forEach(k => MAP_OVERLAYS[k].addTo(map));
 
-  L.control.attribution({ prefix: '© EMODnet · OSM · OpenSeaMap' }).addTo(map);
+  L.control.attribution({ prefix: '© SHOM · EMODnet · OSM · OpenSeaMap' }).addTo(map);
 
   // Toucher la mer → profondeur du point
   map.on('click', e => { if (_activeBase === 'marine') showDepthAt(e.latlng); });
