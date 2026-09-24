@@ -92,8 +92,20 @@
     .layer-btn{background:var(--surf2);border:1.5px solid var(--surf3);border-radius:20px;padding:6px 13px;font-size:12px;cursor:pointer;color:var(--text2);font-weight:600;transition:all .15s;white-space:nowrap}
     .layer-btn.on{background:var(--sea);color:#fff;border-color:var(--sea)}
 
+    /* Carte marine */
+    #leaflet-map.leaflet-container{background:#dbe9ee}
+    .leaflet-land-pane{filter:saturate(.55) brightness(1.04)}
+    .leaflet-control-attribution{font-size:9px!important;max-width:65%}
+    #depth-legend{position:absolute;left:10px;bottom:34px;z-index:500;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-radius:10px;padding:6px 8px 4px;box-shadow:var(--sh);width:170px;pointer-events:none}
+    .dl-bar{height:8px;border-radius:4px;background:linear-gradient(90deg,#d94a3a 0%,#ee6a3b 10%,#f59a42 20%,#f8c852 30%,#e3e063 40%,#b2da73 50%,#78cc92 57.5%,#4fbcb2 65%,#3ea5cf 75%,#3a86c9 81.25%,#3c67b6 87.5%,#394d9e 100%)}
+    .dl-ticks{display:flex;justify-content:space-between;font-size:9.5px;font-weight:700;color:var(--text2);margin-top:2px}
+    .depth-popup .leaflet-popup-content-wrapper{border-radius:12px;padding:0}
+    .depth-popup .leaflet-popup-content{margin:7px 12px;text-align:center}
+    .dp-v{font-size:17px;font-weight:900;color:var(--sea)}
+    .dp-l{font-size:10px;color:var(--text2);font-weight:600}
+
     /* Compass rose */
-    #compass-rose{position:absolute;bottom:16px;left:16px;z-index:500;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-radius:50%;width:64px;height:64px;display:none;flex-direction:column;align-items:center;justify-content:center;box-shadow:var(--sh);border:1.5px solid rgba(28,0,254,.12)}
+    #compass-rose{position:absolute;bottom:86px;left:16px;z-index:500;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-radius:50%;width:64px;height:64px;display:none;flex-direction:column;align-items:center;justify-content:center;box-shadow:var(--sh);border:1.5px solid rgba(28,0,254,.12)}
     .compass-arrow{font-size:22px;line-height:1;transition:transform .2s}
     .compass-deg{font-size:10px;font-weight:800;color:var(--sea);margin-top:1px}
     .compass-dir{font-size:9px;color:var(--text2);font-weight:600}
@@ -661,11 +673,17 @@
           <div>
             <div class="layer-section-title">📡 Calques marins</div>
             <div class="layer-btns">
+              <button class="layer-btn on" id="lo-isobaths" onclick="toggleOverlay('isobaths')">〰️ Isobathes</button>
               <button class="layer-btn on" id="lo-seamark" onclick="toggleOverlay('seamark')">⚓ Balisage</button>
-              <button class="layer-btn" id="lo-depth" onclick="toggleOverlay('depth')">🌈 Profondeurs</button>
-              <button class="layer-btn" id="lo-esri-ref" onclick="toggleOverlay('esri-ref')">🔢 Sondes</button>
             </div>
+            <div style="font-size:11px;color:var(--text2);margin-top:8px">💡 Touche la mer pour lire la profondeur</div>
           </div>
+        </div>
+
+        <!-- Légende profondeurs -->
+        <div id="depth-legend">
+          <div class="dl-bar"></div>
+          <div class="dl-ticks"><span>0</span><span>5</span><span>10</span><span>20</span><span>40 m</span></div>
         </div>
 
         <!-- Compass rose -->
@@ -960,8 +978,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <div id="g-modal"></div>
-<script src="data.js?v=14"></script>
-<script src="app.js?v=14"></script>
-<script src="gestion.js?v=14"></script>
+<script src="data.js?v=18"></script>
+<script src="app.js?v=18"></script>
+<script src="gestion.js?v=18"></script>
 </body>
 </html>

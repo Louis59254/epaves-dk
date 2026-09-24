@@ -1,5 +1,7 @@
 // Cache uniquement les tuiles carte — jamais les fichiers app
-const CACHE = 'maz-tiles-v1';
+// Cache d'abord (carte consultable hors réseau en mer), réseau sinon ; taille plafonnée
+const CACHE = 'maz-tiles-v2';
+const MAX_ENTRIES = 3000;
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -12,21 +14,38 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-self.addEventListener('fetch', e => {
-  const url = e.request.url;
-  // Cacher tuiles OSM et Leaflet — les autres fichiers vont toujours au réseau
-  const isTile = url.includes('tile.openstreetmap') ||
-                 url.includes('openseamap') ||
-                 url.includes('unpkg.com/leaflet');
-  if (isTile) {
-    e.respondWith(
-      caches.match(e.request).then(cached =>
-        cached || fetch(e.request).then(res => {
-          caches.open(CACHE).then(c => c.put(e.request, res.clone()));
-          return res;
-        })
-      )
-    );
+const TILE_HOSTS = [
+  'tile.openstreetmap.org',
+  'openseamap.org',
+  'unpkg.com/leaflet',
+  'basemaps.cartocdn.com',
+  'arcgisonline.com',
+];
+
+function isTile(url) {
+  if (TILE_HOSTS.some(h => url.includes(h))) return true;
+  // WMS EMODnet : GetMap uniquement (GetFeatureInfo = profondeur au clic, toujours en direct)
+  return url.includes('emodnet-bathymetry.eu') && /REQUEST=GetMap/i.test(url);
+}
+
+async function trim(cache) {
+  const keys = await cache.keys();
+  if (keys.length > MAX_ENTRIES) {
+    await Promise.all(keys.slice(0, keys.length - MAX_ENTRIES).map(k => cache.delete(k)));
   }
-  // Fichiers app (index.html, app.js…) : réseau direct, toujours à jour
+}
+
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET' || !isTile(e.request.url)) return;
+  e.respondWith(
+    caches.open(CACHE).then(async cache => {
+      const cached = await cache.match(e.request);
+      if (cached) return cached;
+      const res = await fetch(e.request);
+      if (res.ok || res.type === 'opaque') {
+        cache.put(e.request, res.clone()).then(() => trim(cache));
+      }
+      return res;
+    })
+  );
 });
