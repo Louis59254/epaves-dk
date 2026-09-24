@@ -11,9 +11,7 @@ function _tideContext(ms) {
   const pms = ex.filter(e => e.type === 'PM');
   if (!pms.length) return null;
   const pm = pms.reduce((a, b) => Math.abs(b.t - ms) < Math.abs(a.t - ms) ? b : a);
-  // Coefficient : marnage entre cette PM et la BM la plus basse à ±7 h
-  const bms = ex.filter(e => e.type === 'BM' && Math.abs(e.t - pm.t) < 7 * 3600000);
-  const coef = bms.length ? tideCoefFromRange(pm.h - Math.min(...bms.map(b => b.h))) : 70;
+  const coef = pmCoef(pm, ex) ?? 70;
   return { pm, rel: (ms - pm.t) / 3600000, coef };
 }
 

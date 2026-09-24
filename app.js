@@ -1400,15 +1400,32 @@ function toast(msg, dur = 2600) {
 }
 
 // ── MÉTÉO / MARÉES ────────────────────────────────────────────────────────────
-// Marées : niveau de la mer Open-Meteo Marine (modèle océanique, marées incluses),
-// converti au zéro hydrographique de Dunkerque par régression affine calibrée
-// sur les annuaires officiels : h_ZH = 1.07 × h_MSL + 3.70  (erreur ≈ ±0.1 m)
+// Marées : prédiction astronomique locale (tides_dk.js, marégraphe SHOM de Dunkerque).
+// Secours au-delà de 2028 : niveau Open-Meteo Marine converti au zéro hydrographique
+// par régression affine : h_ZH = 1.07 × h_MSL + 3.70
 const TIDE_MSL_SLOPE  = 1.07;
 const TIDE_MSL_OFFSET = 3.70;
 const TIDE_TIME_SHIFT = 20 * 60000; // biais de phase du modèle à Dunkerque (~20 min)
 
-// Série horaire { t0: ms du 1er point, step: ms, h: [hauteurs ZH] }
+// Série { t0: ms du 1er point, step: ms, h: [hauteurs ZH en m] }
 let _tideSeries = null;
+let _localTides = null;
+
+// Table astronomique embarquée (décodée une fois)
+function _localTideSeries() {
+  if (_localTides !== null) return _localTides;
+  if (typeof TIDE_DK === 'undefined') return (_localTides = false);
+  const bin = atob(TIDE_DK.b64), n = TIDE_DK.n, h = new Float32Array(n);
+  for (let i = 0; i < n; i++) h[i] = ((bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8)) - TIDE_DK.offsetCm) / 100;
+  return (_localTides = { t0: TIDE_DK.t0, step: TIDE_DK.step, h });
+}
+
+function _useLocalTides() {
+  const L = _localTideSeries(), now = Date.now();
+  if (!L || now < L.t0 + 86400000 || now > L.t0 + L.step * L.n - 16 * 86400000) return false;
+  _tideSeries = L;
+  return true;
+}
 
 function _tideIdx(ms) {
   if (!_tideSeries) return -1;
@@ -1499,10 +1516,18 @@ let _meteoLoaded = false;
 let _hourlyWx = null;
 let _hourlyMarine = null;
 
-// Coefficient de marée approx. depuis le marnage du jour
-// (marnage vive-eau moyenne Dunkerque ≈ 5.9 m ↔ coefficient 95)
+// Coefficient depuis le marnage moyen d'une PM (PM − moyenne des BM encadrantes).
+// Régression sur les coefficients officiels publiés (écart ≈ ±2).
 function tideCoefFromRange(marnage) {
-  return Math.max(20, Math.min(120, Math.round(marnage / 5.9 * 95)));
+  return Math.max(20, Math.min(120, Math.round(21.573 * marnage - 22.165)));
+}
+
+function pmCoef(pm, extrema) {
+  const before = extrema.filter(e => e.type === 'BM' && e.t < pm.t && pm.t - e.t < 8 * 3600000).pop();
+  const after = extrema.find(e => e.type === 'BM' && e.t > pm.t && e.t - pm.t < 8 * 3600000);
+  const bms = [before, after].filter(Boolean);
+  if (!bms.length) return null;
+  return tideCoefFromRange(pm.h - bms.reduce((a, b) => a + b.h, 0) / bms.length);
 }
 
 const METEO_CACHE_KEY = 'maz-meteo-v2';
@@ -1523,6 +1548,7 @@ async function _fetchMeteo() {
 }
 
 function _buildTideSeries(tide) {
+  if (_useLocalTides()) return;
   const t = tide.hourly.time, v = tide.hourly.sea_level_height_msl;
   _tideSeries = {
     t0: t[0] * 1000 + TIDE_TIME_SHIFT,
@@ -1533,6 +1559,7 @@ function _buildTideSeries(tide) {
 
 // Marées disponibles sans passer par l'onglet Météo (cache, sinon réseau)
 async function ensureTides() {
+  if (_useLocalTides()) return true;
   const now = Date.now();
   if (_tideSeries && tideH(now + 12 * 3600000) != null) return true;
   const cached = _readMeteoCache();
@@ -1581,9 +1608,9 @@ async function loadMeteo(force = false) {
     const [ico, desc] = wmoDesc(cur.weather_code);
     const cond  = fishingCond(cur.wind_speed_10m, waveH);
 
-    // Strip marées : 8 jours (couverture du modèle océanique)
+    // Strip marées : 14 jours (table locale), 8 en secours Open-Meteo
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-    const dateChips = Array.from({length:8}, (_,i) => {
+    const dateChips = Array.from({length: _useLocalTides() ? 14 : 8}, (_,i) => {
       const d = new Date(todayStart.getTime() + i*86400000);
       const day = d.toLocaleDateString('fr-FR',{weekday:'short'});
       const num = d.getDate();
@@ -1653,11 +1680,13 @@ async function loadMeteo(force = false) {
 
       <div class="met-section">🌊 Marées — Dunkerque</div>
       <div class="tide-date-strip">${dateChips}</div>
+      <div id="tide-live"></div>
       <div id="tide-day-detail"></div>
-      <div style="font-size:10px;color:var(--muted);margin:4px 2px 16px">Marées : modèle océanique Open-Meteo, calé sur le zéro hydrographique de Dunkerque — indicatif, ne remplace pas l'annuaire officiel SHOM · Actualisé ${new Date(data.at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</div>
+      <div style="font-size:10px;color:var(--muted);margin:4px 2px 16px">Marées : prédiction astronomique calculée sur le marégraphe SHOM de Dunkerque, hauteurs au-dessus du zéro des cartes · Météo actualisée ${new Date(data.at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</div>
     `;
 
     renderTideDayDetail(todayStart.getTime());
+    renderTideLive();
     _meteoLoaded = true;
     setTimeout(() => { _meteoLoaded = false; }, METEO_TTL);
 
@@ -1666,6 +1695,32 @@ async function loadMeteo(force = false) {
     el.innerHTML = `<div class="met-loading">❌ Erreur d'affichage météo.<br>
       <button class="g-btn" style="margin-top:12px" onclick="localStorage.removeItem(METEO_CACHE_KEY);loadMeteo(true)">Réessayer</button></div>`;
   }
+}
+
+// Niveau mesuré par le marégraphe SHOM de Dunkerque (temps réel) vs prédiction
+async function renderTideLive() {
+  const el = document.getElementById('tide-live');
+  if (!el) return;
+  try {
+    const end = new Date(), start = new Date(end - 3 * 3600000);
+    const iso = d => d.toISOString().slice(0, 19) + 'Z';
+    const r = await fetch(`https://services.data.shom.fr/maregraphie/observation/json/2?sources=1&dtStart=${iso(start)}&dtEnd=${iso(end)}`).then(x => x.json());
+    const pts = (r.data || []).filter(p => p.value != null);
+    if (!pts.length) return;
+    // moyenne des 5 dernières minutes (lisse le clapot)
+    const last = pts.slice(-5);
+    const obs = last.reduce((a, p) => a + p.value, 0) / last.length;
+    const tObs = Date.parse(last[last.length - 1].timestamp.replace(/\//g, '-').replace(' ', 'T') + 'Z');
+    const pred = tideH(tObs);
+    if (pred == null) return;
+    const surge = obs - pred;
+    const age = Math.round((Date.now() - tObs) / 60000);
+    el.innerHTML = `<div class="tide-live">
+      <div><div class="tl-l">Mesuré au port ${age <= 20 ? 'maintenant' : `il y a ${age} min`}</div><div class="tl-v">${obs.toFixed(2)} m</div></div>
+      <div><div class="tl-l">Prévu</div><div class="tl-v" style="color:var(--text2)">${pred.toFixed(2)} m</div></div>
+      <div><div class="tl-l">${surge >= 0 ? 'Surcote' : 'Décote'}</div><div class="tl-v" style="color:${Math.abs(surge) > 0.25 ? 'var(--red)' : 'var(--green)'}">${surge >= 0 ? '+' : ''}${surge.toFixed(2)} m</div></div>
+    </div>`;
+  } catch { /* marégraphe indisponible : on n'affiche rien */ }
 }
 
 function selectTideDate(ms, el) {
@@ -1732,14 +1787,11 @@ function renderTideDayDetail(dateMs) {
 
   const dateLabel = new Date(dateMs).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
 
-  // Coefficient du jour depuis le marnage (PM max − BM min)
-  const pms = extrema.filter(e => e.type === 'PM'), bms = extrema.filter(e => e.type === 'BM');
-  const coef = (pms.length && bms.length)
-    ? tideCoefFromRange(Math.max(...pms.map(e => e.h)) - Math.min(...bms.map(e => e.h)))
-    : null;
+  const around = computeTideExtrema(dateMs - 10 * 3600000, 46);
 
   const rows = extrema.map(e => {
     const isPM = e.type === 'PM';
+    const coef = isPM ? pmCoef(e, around) : null;
     return `<div class="tide-row">
       <div class="tide-ico">${isPM ? '🔼' : '🔽'}</div>
       <div class="tide-time">${fmtTime(e.t)}</div>
@@ -1747,7 +1799,7 @@ function renderTideDayDetail(dateMs) {
         <div class="tide-type ${isPM?'pm':'bm'}">${isPM?'Pleine mer':'Basse mer'}</div>
         ${isPM && coef ? `<div class="tide-coef">Coefficient ~${coef}</div>` : ''}
       </div>
-      <div class="tide-h">${e.h.toFixed(1)} m</div>
+      <div class="tide-h">${e.h.toFixed(2)} m</div>
     </div>`;
   }).join('');
 
