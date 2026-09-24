@@ -198,3 +198,83 @@ function addUpstreamMark(wreckId, lat, lng) {
   map.flyTo([lat, lng], 15, { duration: 1 });
   toast('Repère posé en amont de l\'épave');
 }
+
+// ── Fiche technique de l'épave ───────────────────────────────────────────────
+function _srcLabel(u) {
+  if (/wrakkendatabank|afdelingkust/.test(u)) return 'Base belge des épaves';
+  if (/emodnet/.test(u) && /heritage/.test(u)) return 'SHOM (EMODnet)';
+  if (/emodnet/.test(u)) return 'UKHO (EMODnet)';
+  if (/dkepaves/.test(u)) return 'dkepaves';
+  if (/wikipedia/.test(u)) return 'Wikipedia';
+  return 'Source';
+}
+
+function _axisSvg(deg) {
+  // Axe sans sens proue/poupe : trait traversant la rose
+  return `<svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="20" fill="#eef0ff" stroke="#c9ccf5"/>
+    <text x="22" y="9" text-anchor="middle" font-size="7" font-weight="800" fill="#6360a0">N</text>
+    <g transform="rotate(${deg} 22 22)"><rect x="19" y="7" width="6" height="30" rx="3" fill="#3b3b4f"/></g></svg>`;
+}
+
+function renderTechSheet(w) {
+  const el = document.getElementById('m-tech');
+  if (!el) return;
+  const cells = [];
+  const add = (l, v) => v != null && v !== '' && cells.push(`<div class="ts-cell"><div class="ts-l">${l}</div><div class="ts-v">${v}</div></div>`);
+  if (w.length_m) add(w.length_is_ship ? 'Longueur navire' : 'Longueur épave', `${Math.round(w.length_m)} m`);
+  if (w.ship_length_m && !w.length_is_ship) add('Longueur navire', `${Math.round(w.ship_length_m)} m`);
+  if (w.beam_m) add('Largeur', `${Math.round(w.beam_m)} m`);
+  if (w.depth_seabed != null) add(w.depth_ref === 'ZH' ? 'Fond (zéro hydro.)' : 'Fond', `${w.depth_seabed} m`);
+  if (w.depth_top != null) add(w.depth_ref === 'ZH' ? 'Sommet (zéro hydro.)' : 'Sommet', w.depth_top < 0 ? `découvre ${Math.abs(w.depth_top)} m` : `${w.depth_top} m`);
+  if (w.height_m) add('Hauteur / fond', `${w.height_m} m`);
+  if (w.ship_type) add('Type', w.ship_type.replace(/\s*\(SHOM\)/i, ''));
+
+  const axis = w.orientation_deg != null ? `
+    <div class="ts-axis">${_axisSvg(w.orientation_deg)}
+      <div><div class="ts-l">Axe de l'épave</div>
+      <div class="ts-v">${Math.round(w.orientation_deg)}° / ${Math.round(w.orientation_deg + 180)}° (${cardinal(w.orientation_deg)}–${cardinal(w.orientation_deg + 180)})</div></div>
+    </div>` : '';
+
+  const src = [...new Set((w.sources || []).map(u => u))].map(u => `<a href="${u}" target="_blank" rel="noopener">${_srcLabel(u)}</a>`).join(' · ');
+
+  if (!cells.length && !axis && !w.state && !w.survey && !w.warn) { el.innerHTML = ''; el.previousElementSibling.style.display = 'none'; return; }
+  el.previousElementSibling.style.display = '';
+  el.innerHTML = `
+    ${cells.length ? `<div class="ts-grid">${cells.join('')}</div>` : ''}
+    ${axis}
+    ${w.state ? `<div class="ts-state">État : <b>${w.state}</b></div>` : ''}
+    ${w.survey ? `<details class="place-tips"><summary>Relevés hydrographiques (SHOM, en anglais)</summary><div class="pt-item">${w.survey}</div></details>` : ''}
+    ${w.warn ? `<div class="ts-warn">⚠️ ${w.warn}</div>` : ''}
+    ${w.extra ? `<div class="ts-note">Épave issue des bases officielles (${w.source_from || 'UKHO / SHOM / base belge'}), absente de dkepaves.</div>` : ''}
+    ${src ? `<div class="ts-src">Sources : ${src}</div>` : ''}`;
+}
+
+// ── Silhouettes orientées des épaves (zoom ≥ 15) ─────────────────────────────
+const HullsLayer = L.LayerGroup.extend({
+  onAdd(map) {
+    L.LayerGroup.prototype.onAdd.call(this, map);
+    this._upd = () => this._refresh(map);
+    map.on('zoomend moveend', this._upd);
+    this._refresh(map);
+  },
+  onRemove(map) {
+    map.off('zoomend moveend', this._upd);
+    L.LayerGroup.prototype.onRemove.call(this, map);
+  },
+  _refresh(map) {
+    this.clearLayers();
+    if (map.getZoom() < 15) return;
+    const b = map.getBounds().pad(0.2);
+    WRECKS.forEach(w => {
+      if (w.orientation_deg == null || !w.length_m || !b.contains([w.lat, w.lng])) return;
+      const L_ = w.length_m / 1000, B_ = Math.max(6, w.beam_m || 8) / 1000, o = w.orientation_deg;
+      const c = [w.lat, w.lng];
+      const bow = _destPoint(c[0], c[1], o, L_ / 2), stern = _destPoint(c[0], c[1], o + 180, L_ / 2);
+      const corner = (p, side) => _destPoint(p[0], p[1], o + side, B_ / 2);
+      const poly = [corner(bow, 90), corner(bow, -90), corner(stern, -90), corner(stern, 90)];
+      this.addLayer(L.polygon(poly, {
+        pane: 'seamarkPane', color: '#fff', weight: 1.5, fillColor: '#2b2b3c', fillOpacity: 0.75, interactive: false,
+      }));
+    });
+  },
+});

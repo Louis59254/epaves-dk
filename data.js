@@ -17,6 +17,7 @@ const CAT = {
   sub:      { label: 'Sous-marin',                   color: '#fbbf24', emoji: '🔭'  },
   lct:      { label: 'Bâtiment de débarquement',    color: '#60a5fa', emoji: '⚓'  },
   avion:    { label: 'Avion',                        color: '#e879f9', emoji: '✈️'  },
+  divers:   { label: 'Navire (type non précisé)',    color: '#64748b', emoji: '🛳️' },
   autre:    { label: 'Autre / Inconnu',              color: '#94a3b8', emoji: '❓'  },
 };
 
@@ -266,23 +267,59 @@ function haversineKm(a, b) {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
 }
 
-const WRECKS = RAW.filter(r => r[4] !== 'autre').map(([id, name, latRaw, lngRaw, cat, year, depth, dynamo, note]) => {
-  const lat = ddm(latRaw), lng = ddm(lngRaw);
-  const d = { lat, lng };
-  const km = haversineKm(DK_PORT, d);
+function _buildWreck({ id, name, lat, lng, gps_raw, cat, year, depth, dynamo, note, det, extra }) {
+  const km = haversineKm(DK_PORT, { lat, lng });
+  det = det || {};
+  // Profondeur affichée : relevé dkepaves, sinon fond officiel (zéro hydrographique)
+  const depthMax = depth != null ? depth : (det.dSea != null && det.dSea > 0 ? Math.round(det.dSea) : null);
   return {
-    id, name, lat, lng,
-    gps_raw: latRaw + ' N / ' + lngRaw + ' E',
+    id, name, lat, lng, gps_raw,
     category: cat,
-    sunk_year: year,
-    depth_max: depth,
+    sunk_year: year || det.year || null,
+    depth_max: depthMax,
     op_dynamo: !!dynamo,
     note: note || null,
-    species: speciesByDepth(depth),
-    visible_low_tide: depth !== null && depth <= 3,
+    species: speciesByDepth(depthMax),
+    visible_low_tide: depthMax !== null && depthMax <= 3,
     dist_port_nm: Math.round(km / 1.852 * 10) / 10,
+    // Fiche technique
+    length_m: det.len ?? null,
+    length_is_ship: !!det.lenShip,
+    ship_length_m: det.shipLen ?? null,
+    beam_m: det.beam ?? null,
+    orientation_deg: det.ori ?? null,
+    orientation_txt: det.oriTxt ?? null,
+    depth_seabed: det.dSea ?? null,
+    depth_top: det.dTop ?? null,
+    depth_ref: det.dRef ?? null,
+    height_m: det.height ?? null,
+    state: det.state ?? null,
+    survey: det.survey ?? null,
+    ship_type: det.type ?? null,
+    warn: det.warn ?? null,
+    sources: det.src || [],
+    source_from: det.from || null,
+    extra: !!extra,
   };
-});
+}
+
+function _fmtDDM(v, pos, neg) {
+  const a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60;
+  return `${d}°${m.toFixed(3)}' ${v >= 0 ? pos : neg}`;
+}
+
+const WRECKS = [
+  ...RAW.filter(r => r[4] !== 'autre').map(([id, name, latRaw, lngRaw, cat, year, depth, dynamo, note]) => _buildWreck({
+    id, name, lat: ddm(latRaw), lng: ddm(lngRaw), gps_raw: latRaw + ' N / ' + lngRaw + ' E',
+    cat, year, depth, dynamo, note,
+    det: typeof WRECK_DETAILS !== 'undefined' ? WRECK_DETAILS[id] : null,
+  })),
+  ...(typeof EXTRA_WRECKS !== 'undefined' ? EXTRA_WRECKS : []).map(x => _buildWreck({
+    id: x.id, name: x.name, lat: x.lat, lng: x.lng,
+    gps_raw: _fmtDDM(x.lat, 'N', 'S') + ' / ' + _fmtDDM(x.lng, 'E', 'O'),
+    cat: x.cat, year: x.year, depth: null, dynamo: false, note: null, det: x.det, extra: true,
+  })),
+];
 
 const DK_CENTER = [51.12, 2.45];
 const DK_ZOOM   = 9;

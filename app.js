@@ -51,13 +51,15 @@ const MAP_OVERLAYS = {
   'isobaths': new IsobathToggle(DEPTH_LAYER),
   // Noms des bancs / ridens (Marine Regions)
   'banks': new BanksLayer(),
+  // Silhouettes orientées à l'échelle (longueur + axe connus), zoom ≥ 15
+  'hulls': new HullsLayer(),
   // Balisage maritime : bouées, phares, épaves, chenaux
   'seamark': L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
     pane: 'seamarkPane', maxZoom: 18,
   }),
 };
 let _activeBase = 'marine';
-const _activeOverlays = new Set(['isobaths', 'banks', 'seamark']);
+const _activeOverlays = new Set(['isobaths', 'banks', 'hulls', 'seamark']);
 
 // ── Profondeur au toucher ────────────────────────────────────────────────────
 // Lue d'abord dans les tuiles affichées (SHOM 20 m), sinon EMODnet GetFeatureInfo
@@ -676,6 +678,7 @@ function openModal(id) {
   updateModalCatches(w.id);
 
   document.getElementById('mbg').classList.add('open');
+  renderTechSheet(w);
   renderPlacement(w);
 
   if (document.getElementById('p-carte').classList.contains('on')) {
