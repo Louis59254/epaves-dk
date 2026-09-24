@@ -268,8 +268,39 @@ function haversineKm(a, b) {
 }
 
 function _buildWreck({ id, name, lat, lng, gps_raw, cat, year, depth, dynamo, note, det, extra }) {
-  const km = haversineKm(DK_PORT, { lat, lng });
   det = det || {};
+  // Position officielle (SHOM / UKHO / base belge) prioritaire sur le relevé dkepaves
+  const off = !extra && typeof OFFICIAL_POS !== 'undefined' ? OFFICIAL_POS[id] : null;
+  const dk = { lat, lng };
+  if (off) { lat = off.lat; lng = off.lng; }
+  gps_raw = _fmtDDM(lat, 'N', 'S') + ' / ' + _fmtDDM(lng, 'E', 'O');
+  const km = haversineKm(DK_PORT, { lat, lng });
+  // Épave déplacée de plus de 300 m : les mesures relevées à l'ancien point concernaient
+  // une autre épave → on ne garde que les données du navire, et la profondeur officielle
+  if (off && off.shift >= 300) {
+    det = { ...det };
+    ['ori', 'oriTxt', 'dSea', 'height', 'state', 'survey', 'warn'].forEach(k => delete det[k]);
+    if (!det.lenShip) delete det.len;
+    det.dTop = off.dTop; det.dRef = off.dTop != null ? 'ZH' : undefined;
+    if (off.url) det.src = [off.url];
+  } else if (off && off.dTop != null && det.dTop == null) {
+    det = { ...det, dTop: off.dTop, dRef: 'ZH' };
+  }
+  // Axe fourni en texte seulement (« 68° … ») → valeur numérique
+  if (det.ori == null && det.oriTxt != null) {
+    const PTS = { N: 0, NNE: 22.5, NE: 45, ENE: 67.5, E: 90, ESE: 112.5, SE: 135, SSE: 157.5, S: 180,
+                  SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5 };
+    const txt = String(det.oriTxt).trim();
+    const m = txt.match(/^(\d{1,3}(?:\.\d+)?)/), w = PTS[txt.split(/[\s(]/)[0].toUpperCase()];
+    if (m) det = { ...det, ori: parseFloat(m[1]) % 180 };
+    else if (w != null) det = { ...det, ori: w % 180 };
+  }
+  // Cohérence : le sommet d'une épave ne peut pas être plus profond que le fond
+  if (det.dSea != null && det.dTop != null && det.dTop > det.dSea) det = { ...det, dSea: undefined };
+  // Les alertes « position data.js » sont résolues quand la position officielle est appliquée
+  const warn = off && det.warn
+    ? det.warn.split(/(?<=\.)\s+/).filter(t => !/data\.js/.test(t)).join(' ') || null
+    : det.warn ?? null;
   // Profondeur affichée : relevé dkepaves, sinon fond officiel (zéro hydrographique)
   const depthMax = depth != null ? depth : (det.dSea != null && det.dSea > 0 ? Math.round(det.dSea) : null);
   return {
@@ -296,7 +327,11 @@ function _buildWreck({ id, name, lat, lng, gps_raw, cat, year, depth, dynamo, no
     state: det.state ?? null,
     survey: det.survey ?? null,
     ship_type: det.type ?? null,
-    warn: det.warn ?? null,
+    warn,
+    pos_official: !!off || !!extra,
+    pos_src: off ? off.src : (extra ? (det.from || 'bases officielles') : 'dkepaves'),
+    pos_shift_m: off ? off.shift : null,
+    pos_dk: off ? dk : null,
     sources: det.src || [],
     source_from: det.from || null,
     extra: !!extra,
@@ -304,8 +339,10 @@ function _buildWreck({ id, name, lat, lng, gps_raw, cat, year, depth, dynamo, no
 }
 
 function _fmtDDM(v, pos, neg) {
-  const a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60;
-  return `${d}°${m.toFixed(3)}' ${v >= 0 ? pos : neg}`;
+  const a = Math.abs(v);
+  let d = Math.floor(a), m = Math.round((a - d) * 60000) / 1000;
+  if (m >= 60) { d += 1; m -= 60; }
+  return `${String(d).padStart(pos === 'N' ? 2 : 3, '0')}°${m.toFixed(3).padStart(6, '0')}' ${v >= 0 ? pos : neg}`;
 }
 
 const WRECKS = [
@@ -318,6 +355,10 @@ const WRECKS = [
     id: x.id, name: x.name, lat: x.lat, lng: x.lng,
     gps_raw: _fmtDDM(x.lat, 'N', 'S') + ' / ' + _fmtDDM(x.lng, 'E', 'O'),
     cat: x.cat, year: x.year, depth: null, dynamo: false, note: null, det: x.det, extra: true,
+  })),
+  ...(typeof ORPHAN_WRECKS !== 'undefined' ? ORPHAN_WRECKS : []).map(x => _buildWreck({
+    id: x.id, name: x.name, lat: x.lat, lng: x.lng, gps_raw: '',
+    cat: x.cat, year: null, depth: null, dynamo: false, note: null, det: x.det, extra: true,
   })),
 ];
 

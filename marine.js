@@ -237,9 +237,13 @@ function renderTechSheet(w) {
 
   const src = [...new Set((w.sources || []).map(u => u))].map(u => `<a href="${u}" target="_blank" rel="noopener">${_srcLabel(u)}</a>`).join(' · ');
 
-  if (!cells.length && !axis && !w.state && !w.survey && !w.warn) { el.innerHTML = ''; el.previousElementSibling.style.display = 'none'; return; }
+  const fmtD = m => m >= 1000 ? (m / 1000).toFixed(1).replace('.', ',') + ' km' : m + ' m';
+  const posLine = w.pos_official
+    ? `<div class="ts-pos ok">✅ Position officielle — ${w.pos_src}${w.pos_shift_m >= 30 ? ` · corrigée de ${fmtD(w.pos_shift_m)} par rapport à dkepaves` : ''}</div>`
+    : `<div class="ts-pos">⚠️ Position dkepaves, non retrouvée dans les bases officielles (SHOM, UKHO, base belge) — à confirmer au sondeur</div>`;
+
   el.previousElementSibling.style.display = '';
-  el.innerHTML = `
+  el.innerHTML = posLine + `
     ${cells.length ? `<div class="ts-grid">${cells.join('')}</div>` : ''}
     ${axis}
     ${w.state ? `<div class="ts-state">État : <b>${w.state}</b></div>` : ''}
