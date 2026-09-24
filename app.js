@@ -255,11 +255,21 @@ function openWaypointDetail(id) {
 
 // ── Layer switcher ────────────────────────────────────────────────────────────
 function toggleLayersPanel() {
-  const p = document.getElementById('map-layers');
-  const btn = document.getElementById('fab-layers');
-  const open = p.classList.toggle('open');
-  btn.classList.toggle('on', open);
+  const open = !document.getElementById('map-layers').classList.contains('open');
+  closeMapPanels();
+  document.getElementById('map-layers').classList.toggle('open', open);
+  document.getElementById('fab-layers').classList.toggle('on', open);
+}
+
+function closeMapPanels() {
+  document.getElementById('map-layers').classList.remove('open');
   document.getElementById('map-filters').classList.remove('open');
+  document.getElementById('fab-layers').classList.remove('on');
+}
+
+function mapPanelOpen() {
+  return document.getElementById('map-layers').classList.contains('open')
+      || document.getElementById('map-filters').classList.contains('open');
 }
 
 function setBaseLayer(name) {
@@ -303,7 +313,11 @@ function initMap() {
   L.control.attribution({ prefix: '© SHOM · EMODnet · OSM · OpenSeaMap' }).addTo(map);
 
   // Toucher la mer → profondeur du point
-  map.on('click', e => { if (_activeBase === 'marine') showDepthAt(e.latlng); });
+  // Tap carte : ferme d'abord un panneau ouvert, sinon affiche la profondeur
+  map.on('click', e => {
+    if (mapPanelOpen()) { closeMapPanels(); return; }
+    if (_activeBase === 'marine') showDepthAt(e.latlng);
+  });
 
   cluster = L.markerClusterGroup({
     maxClusterRadius: 40,
@@ -374,9 +388,9 @@ function mapSearch() {
 }
 
 function toggleMapF() {
-  document.getElementById('map-layers').classList.remove('open');
-  document.getElementById('fab-layers').classList.remove('on');
-  document.getElementById('map-filters').classList.toggle('open');
+  const open = !document.getElementById('map-filters').classList.contains('open');
+  closeMapPanels();
+  document.getElementById('map-filters').classList.toggle('open', open);
 }
 
 function buildCatChips() {
