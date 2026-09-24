@@ -49,13 +49,15 @@ const MAP_BASES = {
 };
 const MAP_OVERLAYS = {
   'isobaths': new IsobathToggle(DEPTH_LAYER),
+  // Noms des bancs / ridens (Marine Regions)
+  'banks': new BanksLayer(),
   // Balisage maritime : bouées, phares, épaves, chenaux
   'seamark': L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
     pane: 'seamarkPane', maxZoom: 18,
   }),
 };
 let _activeBase = 'marine';
-const _activeOverlays = new Set(['isobaths', 'seamark']);
+const _activeOverlays = new Set(['isobaths', 'banks', 'seamark']);
 
 // ── Profondeur au toucher ────────────────────────────────────────────────────
 // Lue d'abord dans les tuiles affichées (SHOM 20 m), sinon EMODnet GetFeatureInfo
@@ -303,9 +305,9 @@ function initMap() {
   });
 
   // Ordre d'empilement : bathymétrie < isobathes < terre < noms < balisage
-  [['bathyPane', 210], ['landPane', 230], ['seamarkPane', 250]]
+  [['bathyPane', 210], ['landPane', 230], ['bankPane', 245], ['seamarkPane', 250]]
     .forEach(([name, z]) => { map.createPane(name).style.zIndex = z; });
-  ['landPane', 'seamarkPane'].forEach(n => map.getPane(n).style.pointerEvents = 'none');
+  ['landPane', 'bankPane', 'seamarkPane'].forEach(n => map.getPane(n).style.pointerEvents = 'none');
 
   MAP_BASES['marine'].addTo(map);
   _activeOverlays.forEach(k => MAP_OVERLAYS[k].addTo(map));
@@ -674,6 +676,7 @@ function openModal(id) {
   updateModalCatches(w.id);
 
   document.getElementById('mbg').classList.add('open');
+  renderPlacement(w);
 
   if (document.getElementById('p-carte').classList.contains('on')) {
     map.flyTo([w.lat, w.lng], 13, { duration: 1 });
@@ -1526,6 +1529,23 @@ function _buildTideSeries(tide) {
     step: (t[1] - t[0]) * 1000,
     h: v.map(x => x == null ? null : Math.max(0, TIDE_MSL_SLOPE * x + TIDE_MSL_OFFSET)),
   };
+}
+
+// Marées disponibles sans passer par l'onglet Météo (cache, sinon réseau)
+async function ensureTides() {
+  const now = Date.now();
+  if (_tideSeries && tideH(now + 12 * 3600000) != null) return true;
+  const cached = _readMeteoCache();
+  if (cached?.tide?.hourly) {
+    _buildTideSeries(cached.tide);
+    if (tideH(now + 12 * 3600000) != null) return true;
+  }
+  try {
+    const tide = await fetch('https://marine-api.open-meteo.com/v1/marine?latitude=51.048&longitude=2.367&hourly=sea_level_height_msl&timeformat=unixtime&forecast_days=8&past_days=1&timezone=Europe%2FParis').then(r => r.json());
+    if (!tide?.hourly?.sea_level_height_msl) return !!_tideSeries;
+    _buildTideSeries(tide);
+    return true;
+  } catch { return !!_tideSeries; }
 }
 
 async function loadMeteo(force = false) {

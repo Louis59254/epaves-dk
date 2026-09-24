@@ -94,6 +94,31 @@
     .panel-close{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;border:none;background:var(--surf2);color:var(--text2);font-size:15px;font-weight:700;cursor:pointer;line-height:30px;padding:0}
     #map-layers,#map-filters{z-index:600}
 
+
+    /* Bancs */
+    .bank-label{pointer-events:none}
+    .bank-label span{position:absolute;white-space:nowrap;font-style:italic;font-weight:700;font-size:var(--bank-fs,11px);letter-spacing:.06em;color:#5b4a2a;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff;text-transform:uppercase}
+    .banks-hidden{display:none}
+    /* Courant & placement */
+    .place-now{display:flex;align-items:center;gap:12px;background:var(--surf2);border-radius:var(--r);padding:10px 12px}
+    .place-arrow{width:40px;height:40px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh);color:var(--sea);font-weight:900}
+    .place-phase{font-size:14px;font-weight:800;color:var(--text)}
+    .place-sub{font-size:11.5px;color:var(--text2);margin-top:2px}
+    .cs-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+    .cs-cell{border-radius:10px;padding:5px 0;text-align:center;display:flex;flex-direction:column;align-items:center;gap:1px}
+    .cs-cell.good{background:#dcf5e8}.cs-cell.mid{background:#fdf1d6}.cs-cell.hard{background:#fde2e2}.cs-cell.slack{background:#e6e8ff}
+    .cs-h{font-size:9.5px;font-weight:700;color:var(--text2)}
+    .cs-v{font-size:10.5px;font-weight:800;color:var(--text)}
+    .cs-slack{font-size:15px;font-weight:900;color:var(--sea);line-height:18px}
+    .cs-legend{display:flex;gap:10px;justify-content:center;font-size:9.5px;color:var(--text2);margin:4px 0 8px}
+    .cs-legend span::before{content:'';display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:3px;vertical-align:-1px}
+    .cs-legend .good::before{background:#9fdcbb}.cs-legend .mid::before{background:#f5d48c}.cs-legend .hard::before{background:#f3a6a6}.cs-legend .slack::before{background:#b8bdf5}
+    .place-svg{width:100%;display:block;border-radius:14px}
+    .place-tips{margin-top:10px;font-size:12.5px;color:var(--text2)}
+    .place-tips summary{font-weight:700;color:var(--sea);cursor:pointer;padding:6px 0}
+    .pt-item{padding:7px 0;border-top:1px solid var(--surf3);line-height:1.45}
+    .pt-item a{color:var(--sea);font-size:11px}
+    .place-note{font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.4}
     /* Carte marine */
     #leaflet-map.leaflet-container{background:#dbe9ee}
     .leaflet-land-pane{filter:saturate(.55) brightness(1.04)}
@@ -679,6 +704,7 @@
             <div class="layer-btns">
               <button class="layer-btn on" id="lo-isobaths" onclick="toggleOverlay('isobaths')">〰️ Isobathes</button>
               <button class="layer-btn on" id="lo-seamark" onclick="toggleOverlay('seamark')">⚓ Balisage</button>
+              <button class="layer-btn on" id="lo-banks" onclick="toggleOverlay('banks')">🏝 Bancs</button>
             </div>
             <div style="font-size:11px;color:var(--text2);margin-top:8px">💡 Touche la mer pour lire la profondeur<br>Sondes SHOM 20 m · aide à la pêche, ne remplace pas la carte officielle</div>
           </div>
@@ -889,6 +915,9 @@
     <!-- Techniques -->
     <div class="sec">🪝 Techniques recommandées</div>
     <div id="m-techs"></div>
+
+    <div class="sec">🧭 Courant &amp; placement</div>
+    <div id="m-place"></div>
     <!-- Mes prises sur cette épave -->
     <div class="sec" id="m-catches-sec">🏆 Mes prises ici</div>
     <div class="catches-wrap" id="m-catches">
@@ -982,9 +1011,11 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <div id="g-modal"></div>
-<script src="data.js?v=23"></script>
-<script src="bathy.js?v=23"></script>
-<script src="app.js?v=23"></script>
-<script src="gestion.js?v=23"></script>
+<script src="data.js?v=26"></script>
+<script src="bathy.js?v=26"></script>
+<script src="marine_data.js?v=26"></script>
+<script src="marine.js?v=26"></script>
+<script src="app.js?v=26"></script>
+<script src="gestion.js?v=26"></script>
 </body>
 </html>
