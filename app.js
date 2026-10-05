@@ -1354,7 +1354,7 @@ function _wikiPort() {
         <div style="font-size:13px;color:var(--text2)">Ponton VST — Dunkerque</div>
       </div>
       <div style="background:var(--surf);border-radius:var(--r);padding:16px;margin-bottom:12px;text-align:center">
-        <img src="qr-port.png" alt="QR code accès port" style="width:min(280px,80vw);height:auto;display:block;margin:0 auto;border-radius:8px">
+        <img src="qr-port.png?v=2" alt="QR code accès port" style="width:min(280px,80vw);height:auto;display:block;margin:0 auto;border-radius:8px">
         <div style="margin-top:12px;font-size:13px;color:var(--text2)">Scanner pour accéder au port</div>
       </div>
       <div style="background:var(--surf);border-radius:var(--r);padding:14px;margin-bottom:12px">
@@ -1366,7 +1366,7 @@ function _wikiPort() {
           </div>
           <div style="background:var(--surf2);border-radius:10px;padding:12px">
             <div style="font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.06em">VALIDITÉ</div>
-            <div style="font-size:13px;font-weight:700;color:var(--text);margin-top:2px">01/05 → 30/09/2026</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text);margin-top:2px">30/09/2026 → 31/12/2029</div>
           </div>
         </div>
       </div>
@@ -1378,10 +1378,15 @@ function _wikiPort() {
             <span style="font-size:14px;font-weight:600;color:var(--text)">Porte Gate 1</span>
           </div>
           <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--surf2);border-radius:10px">
+            <span style="font-size:20px">🚪</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text)">Porte Gate 2</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--surf2);border-radius:10px">
             <span style="font-size:20px">👥</span>
             <span style="font-size:14px;font-weight:600;color:var(--text)">Porte Accès membres et visiteurs</span>
           </div>
         </div>
+        <div style="font-size:11.5px;color:var(--text2);margin-top:10px">Tous les jours, toute la journée</div>
       </div>
     </div>`;
 }
