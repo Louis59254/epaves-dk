@@ -1121,6 +1121,7 @@ function _drawInfo() {
   else if (_wikiSection === 'regie')      el.innerHTML = _wikiRegie();
   else if (_wikiSection === 'conseils')   el.innerHTML = _wikiConseils();
   else if (_wikiSection === 'port')       el.innerHTML = _wikiPort();
+  else if (_wikiSection === 'plan')       el.innerHTML = _wikiPlan();
   el.scrollTop = 0;
 }
 
@@ -1159,6 +1160,11 @@ function _wikiHome() {
         <div class="wiki-cat-ico">⚓</div>
         <div class="wiki-cat-name">Accès Port</div>
         <div class="wiki-cat-sub">QR code · Ponton VST</div>
+      </div>
+      <div class="wiki-cat" onclick="wikiNav('plan')">
+        <div class="wiki-cat-ico">🗺️</div>
+        <div class="wiki-cat-name">Plan du port</div>
+        <div class="wiki-cat-sub">Pontons A à K · visiteurs</div>
       </div>
     </div>
     <div class="met-section">🌟 TOP ESPÈCES DU MOMENT</div>
@@ -1344,6 +1350,43 @@ function _wikiConseils() {
     <div class="wiki-text"><p>• <strong>Arénicole</strong> : à Malo Terminus lors des grandes marées. Max 100/marée. Conservation enroulée dans du journal au frigo.<br>• <strong>Couteaux</strong> : grandes marées uniquement, sur les bancs les plus bas. À conserver au frais dans l'eau de mer.<br>• <strong>Crevettes bouquets</strong> : la nuit aux abords des digues et enrochements. Conservation avec bulleur.<br>• <strong>Crabes mous</strong> : trouvés de nuit dans les zones de mue. Garder dans algues humides au frais.</p></div>
     <div style="height:12px"></div>
   </div>`;
+}
+
+// Plan des pontons (YCMN La Marina) — zoom par boutons, défilement au doigt
+let _planZoom = 1;
+function planZoom(d) {
+  _planZoom = Math.max(1, Math.min(4, _planZoom + d));
+  const box = document.getElementById('plan-box'), img = document.getElementById('plan-img');
+  // garde le centre de la vue pendant le zoom
+  const cx = (box.scrollLeft + box.clientWidth / 2) / img.clientWidth, cy = (box.scrollTop + box.clientHeight / 2) / img.clientHeight;
+  img.style.width = _planZoom * 100 + '%';
+  box.scrollLeft = cx * img.clientWidth - box.clientWidth / 2;
+  box.scrollTop = cy * img.clientHeight - box.clientHeight / 2;
+  document.getElementById('plan-lvl').textContent = '×' + _planZoom;
+}
+
+function _wikiPlan() {
+  _planZoom = 1;
+  return `
+    <div style="padding:16px">
+      <button class="wiki-back" onclick="wikiNav('home')">← Info</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px">
+        <div><div style="font-size:20px;font-weight:800;color:var(--text)">Plan du port</div>
+          <div style="font-size:12.5px;color:var(--text2)">YCMN La Marina — pontons et places</div></div>
+        <div class="plan-ctl">
+          <button onclick="planZoom(-1)" aria-label="Dézoomer">−</button><span id="plan-lvl">×1</span><button onclick="planZoom(1)" aria-label="Zoomer">+</button>
+        </div>
+      </div>
+      <div id="plan-box" ondblclick="planZoom(_planZoom >= 4 ? -3 : 1)">
+        <img id="plan-img" src="plan-port.webp?v=1" alt="Plan des pontons du port YCMN La Marina">
+      </div>
+      <div style="font-size:11.5px;color:var(--text2);margin-top:8px">Zoomez avec + et −, ou touchez deux fois le plan, puis faites glisser. Le haut du plan pointe vers l'est.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+        ${[['A · B', 'Pontons sud, côté zone technique'], ['C · D', 'Ponton central sud'], ['E · F', 'Ponton central, face au bureau du port'],
+           ['G · H', 'Ponton nord'], ['I · J', 'Bassin nord, côté parking'], ['V', 'Ponton visiteurs (V00 à V18)'], ['K', 'Quai sud, K01 à K09'], ['À terre', 'Bureau du port, restaurant, sanitaires, parking']]
+          .map(([k, t]) => `<div style="background:var(--surf);border-radius:10px;padding:9px 11px"><b style="color:var(--sea)">${k}</b><div style="font-size:12px;color:var(--text2)">${t}</div></div>`).join('')}
+      </div>
+    </div>`;
 }
 
 function _wikiPort() {
