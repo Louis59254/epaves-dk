@@ -681,8 +681,10 @@ function openModal(id) {
   renderTechSheet(w);
   renderPlacement(w);
 
-  if (document.getElementById('p-carte').classList.contains('on')) {
-    map.flyTo([w.lat, w.lng], 13, { duration: 1 });
+  // Recentrage seulement si la carte est réellement affichée (taille non nulle)
+  const sz = map.getSize();
+  if (document.getElementById('p-carte').classList.contains('on') && carteView === 'map' && sz.x > 0 && sz.y > 0) {
+    map.flyTo([w.lat, w.lng], Math.max(map.getZoom(), 13), { duration: 1 });
   }
 }
 
